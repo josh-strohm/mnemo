@@ -81,11 +81,16 @@ export const memoryFiltersSchema = z.object({
   project: z
     .string()
     .optional()
-    .transform((v) => {
+    .transform((v): string | "global" | undefined => {
       if (v === undefined || v === "") return undefined;
       if (v === "global") return "global" as const;
       return v;
     }),
   tag: z.string().trim().optional(),
 });
-export type MemoryFilters = z.infer<typeof memoryFiltersSchema>;
+export type MemoryFilters = {
+  q?: string;
+  type?: MemoryType;
+  project?: string | "global";
+  tag?: string;
+};
