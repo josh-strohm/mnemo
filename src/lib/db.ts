@@ -10,7 +10,8 @@ function createPrismaClient() {
   if (!url) {
     throw new Error("DATABASE_URL environment variable is not set");
   }
-  const adapter = new PrismaLibSql({ url });
+  const authToken = process.env.TURSO_AUTH_TOKEN || undefined;
+  const adapter = new PrismaLibSql({ url, authToken });
   return new PrismaClient({ adapter });
 }
 
