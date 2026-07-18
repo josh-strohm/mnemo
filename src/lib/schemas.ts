@@ -101,3 +101,21 @@ export type MemoryFilters = {
   project?: string | "global";
   tag?: string;
 };
+
+export const memoryApiCreateSchema = z.object({
+  type: memoryTypeSchema,
+  title: z.string().trim().min(1).max(200),
+  content: z.string().trim().min(1),
+  tags: z.array(z.string().trim().min(1)).default([]),
+  projectSlug: z.string().optional().nullable(),
+});
+export type MemoryApiCreateInput = z.infer<typeof memoryApiCreateSchema>;
+
+export function normalizeSlug(slug: string): string {
+  return slug
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
