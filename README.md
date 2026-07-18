@@ -75,13 +75,18 @@ In the Netlify dashboard for your site, go to **Site settings > Environment vari
 
 ### 5. Push the schema to Turso
 
-Set the env vars locally (in `.env` or your shell), then run:
+The Prisma CLI's native engine doesn't understand `libsql://` URLs, so `prisma db push` can't connect to Turso directly. Instead, generate the schema SQL and paste it into the Turso web SQL shell:
 
 ```bash
-npx prisma db push
+npm run db:sql
 ```
 
-This creates the `Project` and `Memory` tables in Turso. The `prisma.config.ts` file automatically appends `?authToken=...` to the datasource URL when `TURSO_AUTH_TOKEN` is set.
+This runs `prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script`, which outputs a complete `CREATE TABLE` + `CREATE INDEX` SQL script. Copy the output, then:
+
+1. Go to your Turso database's **SQL Shell** in the [Turso dashboard](https://app.turso.app).
+2. Paste the SQL script and run it.
+
+This creates the `Project` and `Memory` tables with indexes. After that, your Turso database is ready and Mnemo will connect to it at runtime via the `@prisma/adapter-libsql` driver adapter.
 
 ## Netlify Deployment
 
