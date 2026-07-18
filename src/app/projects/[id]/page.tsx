@@ -2,9 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProject } from "@/lib/projects";
 import { listMemories } from "@/lib/memories";
-import { deleteProjectAction } from "@/app/actions";
 import { MEMORY_TYPE_LABELS } from "@/lib/schemas";
 import { AutoRefresh } from "@/app/AutoRefresh";
+import { ProjectEditForm } from "@/app/projects/[id]/ProjectEditForm";
 
 export default async function ProjectDetailPage({
   params,
@@ -78,23 +78,23 @@ export default async function ProjectDetailPage({
         )}
       </div>
 
+      <details className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          Edit name &amp; slug
+        </summary>
+        <div className="mt-4">
+          <ProjectEditForm project={project} />
+        </div>
+      </details>
+
       <details className="rounded-lg border border-red-200 dark:border-red-900 p-4">
         <summary className="cursor-pointer text-sm font-medium text-red-600 dark:text-red-400">
           Delete project
         </summary>
-        <form action={deleteProjectAction} className="mt-4">
-          <input type="hidden" name="id" value={project.id} />
-          <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
-            Deleting this project will not destroy its memories — they will
-            become global instead. This cannot be undone.
-          </p>
-          <button
-            type="submit"
-            className="rounded-md border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-2 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-950"
-          >
-            Delete project
-          </button>
-        </form>
+        <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+          Deleting this project will not destroy its memories — they will
+          become global instead. This cannot be undone.
+        </p>
       </details>
     </div>
     </AutoRefresh>

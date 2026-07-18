@@ -6,13 +6,19 @@ import {
   memoryCreateSchema,
   memoryUpdateSchema,
   projectCreateSchema,
+  projectUpdateSchema,
 } from "@/lib/schemas";
 import {
   createMemory,
   updateMemory,
   deleteMemory,
 } from "@/lib/memories";
-import { createProject, deleteProject } from "@/lib/projects";
+import {
+  createProject,
+  updateProject,
+  deleteProject,
+  ProjectSlugTakenError,
+} from "@/lib/projects";
 
 function requireString(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -82,9 +88,40 @@ export async function createProjectAction(formData: FormData) {
   redirect(`/projects/${project.id}`);
 }
 
-export async function deleteProjectAction(formData: FormData) {
+export async function deleteProjectAction(
+  _prev: { error?: string } | undefined,
+  formData: FormData,
+): Promise<{ error?: string }> {
   const id = requireString(formData, "id");
+  const confirm = formData.get("confirm");
+  if (confirm !== "yes") {
+    return { error: "Please check the confirmation box to delete." };
+  }
   await deleteProject(id);
   revalidatePath("/projects");
   redirect("/projects");
+}
+
+export async function updateProjectAction(
+  _prev: { error?: string } | undefined,
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const input = projectUpdateSchema.parse({
+    id: requireString(formData, "id"),
+    name: requireString(formData, "name"),
+    slug: requireString(formData, "slug"),
+  });
+
+  try {
+    await updateProject(input.id, { name: input.name, slug: input.slug });
+  } catch (err) {
+    if (err instanceof ProjectSlugTakenError) {
+      return { error: err.message };
+    }
+    throw err;
+  }
+
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${input.id}`);
+  redirect(`/projects/${input.id}`);
 }

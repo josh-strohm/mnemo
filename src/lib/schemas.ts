@@ -75,6 +75,18 @@ export const projectCreateSchema = z.object({
 });
 export type ProjectCreateInput = z.infer<typeof projectCreateSchema>;
 
+export const projectUpdateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(100),
+  slug: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .transform((s) => normalizeSlug(s)),
+});
+export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>;
+
 const emptyStringToUndefined = z.preprocess((v) =>
   v === "" ? undefined : v,
   z.string().optional(),
