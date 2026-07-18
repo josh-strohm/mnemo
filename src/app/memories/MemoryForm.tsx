@@ -24,7 +24,7 @@ export function MemoryForm({
         <select
           name="type"
           defaultValue={memory?.type ?? MEMORY_TYPES[0]}
-          className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+          className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm"
         >
           {MEMORY_TYPES.map((t) => (
             <option key={t} value={t}>
@@ -73,7 +73,7 @@ export function MemoryForm({
         <select
           name="projectId"
           defaultValue={memory?.projectId ?? ""}
-          className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+          className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm"
         >
           <option value="">Global (no project)</option>
           {projects.map((p) => (

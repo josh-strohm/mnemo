@@ -47,7 +47,7 @@ export default async function MemoriesPage({
         <select
           name="type"
           defaultValue={filters.type ?? ""}
-          className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+          className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm"
         >
           <option value="">All types</option>
           {MEMORY_TYPES.map((t) => (
@@ -59,7 +59,7 @@ export default async function MemoriesPage({
         <select
           name="project"
           defaultValue={filters.project ?? ""}
-          className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm"
+          className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm"
         >
           <option value="">All projects</option>
           <option value="global">Global</option>
