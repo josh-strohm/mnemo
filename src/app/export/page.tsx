@@ -1,6 +1,7 @@
 import { listProjects } from "@/lib/projects";
 import { compileExport } from "@/lib/export";
 import { CopyButton } from "@/app/export/CopyButton";
+import { AutoRefresh } from "@/app/AutoRefresh";
 
 export default async function ExportPage({
   searchParams,
@@ -17,8 +18,9 @@ export default async function ExportPage({
   ]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Export</h1>
+    <AutoRefresh>
+      <div className="flex flex-col gap-6">
+        <h1 className="text-2xl font-semibold">Export</h1>
 
       <form method="GET" action="/export" className="flex flex-wrap items-center gap-2">
         <label className="text-sm font-medium">Project:</label>
@@ -54,5 +56,6 @@ export default async function ExportPage({
         {compiled}
       </pre>
     </div>
+    </AutoRefresh>
   );
 }

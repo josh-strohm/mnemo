@@ -6,6 +6,7 @@ import {
   MEMORY_TYPE_LABELS,
   memoryFiltersSchema,
 } from "@/lib/schemas";
+import { AutoRefresh } from "@/app/AutoRefresh";
 
 export default async function MemoriesPage({
   searchParams,
@@ -25,15 +26,16 @@ export default async function MemoriesPage({
   ]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Memories</h1>
-        <Link
-          href="/memories/new"
-          className="rounded-md bg-zinc-900 text-white dark:bg-zinc-100 dark:text-black px-4 py-2 text-sm font-medium hover:opacity-90"
-        >
-          New memory
-        </Link>
+    <AutoRefresh>
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Memories</h1>
+          <Link
+            href="/memories/new"
+            className="rounded-md bg-zinc-900 text-white dark:bg-zinc-100 dark:text-black px-4 py-2 text-sm font-medium hover:opacity-90"
+          >
+            New memory
+          </Link>
       </div>
 
       <form className="flex flex-wrap gap-2" method="GET" action="/memories">
@@ -130,5 +132,6 @@ export default async function MemoriesPage({
         </ul>
       )}
     </div>
+    </AutoRefresh>
   );
 }

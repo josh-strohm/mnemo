@@ -4,6 +4,7 @@ import { getProject } from "@/lib/projects";
 import { listMemories } from "@/lib/memories";
 import { deleteProjectAction } from "@/app/actions";
 import { MEMORY_TYPE_LABELS } from "@/lib/schemas";
+import { AutoRefresh } from "@/app/AutoRefresh";
 
 export default async function ProjectDetailPage({
   params,
@@ -20,12 +21,13 @@ export default async function ProjectDetailPage({
   const memories = await listMemories({ project: project.id });
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">{project.name}</h1>
-          <p className="text-sm text-zinc-500">/{project.slug}</p>
-        </div>
+    <AutoRefresh>
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">{project.name}</h1>
+            <p className="text-sm text-zinc-500">/{project.slug}</p>
+          </div>
         <Link
           href="/projects"
           className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
@@ -95,5 +97,6 @@ export default async function ProjectDetailPage({
         </form>
       </details>
     </div>
+    </AutoRefresh>
   );
 }
