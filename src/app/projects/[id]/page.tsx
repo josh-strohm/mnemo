@@ -5,6 +5,7 @@ import { listMemories } from "@/lib/memories";
 import { MEMORY_TYPE_LABELS } from "@/lib/schemas";
 import { AutoRefresh } from "@/app/AutoRefresh";
 import { ProjectEditForm } from "@/app/projects/[id]/ProjectEditForm";
+import { ProjectDeleteForm } from "@/app/projects/[id]/ProjectDeleteForm";
 
 export default async function ProjectDetailPage({
   params,
@@ -87,14 +88,14 @@ export default async function ProjectDetailPage({
         </div>
       </details>
 
-      <details className="rounded-lg border border-red-200 dark:border-red-900 p-4">
+      <details id="delete" className="rounded-lg border border-red-200 dark:border-red-900 p-4">
         <summary className="cursor-pointer text-sm font-medium text-red-600 dark:text-red-400">
           Delete project
         </summary>
-        <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
-          Deleting this project will not destroy its memories — they will
-          become global instead. This cannot be undone.
-        </p>
+        <ProjectDeleteForm
+          memoryCount={memories.length}
+          projectId={project.id}
+        />
       </details>
     </div>
     </AutoRefresh>

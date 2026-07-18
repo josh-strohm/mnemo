@@ -62,6 +62,12 @@ export default async function ProjectsPage() {
                 >
                   Export
                 </Link>
+                <Link
+                  href={`/projects/${p.id}#delete`}
+                  className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                >
+                  Delete
+                </Link>
               </div>
             </li>
           ))}
