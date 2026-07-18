@@ -75,18 +75,25 @@ export const projectCreateSchema = z.object({
 });
 export type ProjectCreateInput = z.infer<typeof projectCreateSchema>;
 
+const emptyStringToUndefined = z.preprocess((v) =>
+  v === "" ? undefined : v,
+  z.string().optional(),
+);
+
 export const memoryFiltersSchema = z.object({
-  q: z.string().trim().optional(),
-  type: memoryTypeSchema.optional(),
-  project: z
-    .string()
-    .optional()
-    .transform((v): string | "global" | undefined => {
-      if (v === undefined || v === "") return undefined;
+  q: emptyStringToUndefined,
+  type: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    memoryTypeSchema.optional(),
+  ),
+  project: emptyStringToUndefined.transform(
+    (v): string | "global" | undefined => {
+      if (v === undefined) return undefined;
       if (v === "global") return "global" as const;
       return v;
-    }),
-  tag: z.string().trim().optional(),
+    },
+  ),
+  tag: emptyStringToUndefined,
 });
 export type MemoryFilters = {
   q?: string;
