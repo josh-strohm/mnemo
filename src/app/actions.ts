@@ -14,6 +14,8 @@ import {
   deleteMemory,
   restoreMemory,
   updateMemoryPartial,
+  addLinks,
+  removeLinks,
 } from "@/lib/memories";
 import { restoreVersion } from "@/lib/versions";
 import {
@@ -107,6 +109,23 @@ export async function restoreVersionAction(formData: FormData) {
   revalidatePath("/memories");
   revalidatePath(`/memories/${id}`);
   redirect(`/memories/${id}`);
+}
+
+export async function linkMemoryAction(formData: FormData) {
+  const id = requireString(formData, "id");
+  const linkId = requireString(formData, "linkId");
+  if (linkId.length === 0) {
+    return; // nothing selected
+  }
+  await addLinks(id, [linkId]);
+  revalidatePath(`/memories/${id}`);
+}
+
+export async function unlinkMemoryAction(formData: FormData) {
+  const id = requireString(formData, "id");
+  const linkId = requireString(formData, "linkId");
+  await removeLinks(id, [linkId]);
+  revalidatePath(`/memories/${id}`);
 }
 
 export async function createProjectAction(formData: FormData) {

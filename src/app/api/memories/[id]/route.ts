@@ -1,5 +1,10 @@
 import { ZodError } from "zod";
-import { getMemory, updateMemoryPartial, deleteMemory } from "@/lib/memories";
+import {
+  getMemory,
+  updateMemoryPartial,
+  deleteMemory,
+  getRelatedMemories,
+} from "@/lib/memories";
 import { getProjectBySlug, createProject } from "@/lib/projects";
 import { backfillEmbeddingForMemory } from "@/lib/search";
 import { memoryApiUpdateSchema, normalizeSlug } from "@/lib/schemas";
@@ -7,7 +12,7 @@ import { memoryApiUpdateSchema, normalizeSlug } from "@/lib/schemas";
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   ctx: RouteContext,
 ) {
   const { id } = await ctx.params;
@@ -15,7 +20,13 @@ export async function GET(
   if (!memory) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
-  return Response.json(memory);
+  // ?expand=related populates the graph links so callers can render traversal
+  // edges without a second request.
+  const wantRelated =
+    new URL(request.url).searchParams.get("expand") === "related";
+  if (!wantRelated) return Response.json(memory);
+  const related = await getRelatedMemories(id);
+  return Response.json({ ...memory, relatedMemories: related });
 }
 
 export async function PUT(

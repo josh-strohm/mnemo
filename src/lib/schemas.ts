@@ -253,6 +253,16 @@ export const batchDeleteSchema = z.object({
 });
 export type BatchDeleteInput = z.infer<typeof batchDeleteSchema>;
 
+export const linkUpdateSchema = z
+  .object({
+    add: z.array(z.string().trim().min(1)).max(50).optional(),
+    remove: z.array(z.string().trim().min(1)).max(50).optional(),
+  })
+  .refine((v) => (v.add && v.add.length > 0) || (v.remove && v.remove.length > 0), {
+    message: "At least one of `add` or `remove` must be a non-empty array",
+  });
+export type LinkUpdateInput = z.infer<typeof linkUpdateSchema>;
+
 // Search query -------------------------------------------------------------
 
 export const searchQuerySchema = z.object({

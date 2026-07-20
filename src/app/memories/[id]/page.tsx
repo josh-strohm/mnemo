@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getMemory } from "@/lib/memories";
+import {
+  getMemory,
+  getRelatedMemories,
+  listLinkableMemories,
+} from "@/lib/memories";
 import { listVersions } from "@/lib/versions";
 import { listProjects } from "@/lib/projects";
 import {
   updateMemoryAction,
   deleteMemoryAction,
   restoreVersionAction,
+  linkMemoryAction,
+  unlinkMemoryAction,
 } from "@/app/actions";
 import { MemoryForm } from "@/app/memories/MemoryForm";
 import { MEMORY_TYPE_LABELS } from "@/lib/schemas";
@@ -17,10 +23,12 @@ export default async function MemoryDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [memory, projects, versions] = await Promise.all([
+  const [memory, projects, versions, related, linkable] = await Promise.all([
     getMemory(id),
     listProjects(),
     listVersions(id),
+    getRelatedMemories(id),
+    listLinkableMemories(id),
   ]);
 
   if (!memory) {
@@ -111,6 +119,74 @@ export default async function MemoryDetailPage({
                 </form>
               </div>
             ))
+          )}
+        </div>
+      </details>
+
+      <details className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          Related memories ({related.length})
+        </summary>
+        <div className="mt-4 space-y-3">
+          {related.length === 0 ? (
+            <p className="text-sm text-zinc-500">
+              No links yet. Link related memories to build a graph.
+            </p>
+          ) : (
+            related.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-center justify-between gap-2 rounded border border-zinc-200 dark:border-zinc-800 p-2 text-sm"
+              >
+                <Link
+                  href={`/memories/${r.id}`}
+                  className="font-medium hover:underline"
+                >
+                  {r.title}
+                </Link>
+                <form action={unlinkMemoryAction}>
+                  <input type="hidden" name="id" value={memory.id} />
+                  <input type="hidden" name="linkId" value={r.id} />
+                  <button
+                    type="submit"
+                    className="text-xs rounded border border-zinc-300 dark:border-zinc-700 px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                  >
+                    Unlink
+                  </button>
+                </form>
+              </div>
+            ))
+          )}
+
+          {linkable.length > 0 ? (
+            <form action={linkMemoryAction} className="mt-2">
+              <input type="hidden" name="id" value={memory.id} />
+              <label className="block text-xs text-zinc-500 mb-1">
+                Link another memory
+              </label>
+              <div className="flex gap-2">
+                <select
+                  name="linkId"
+                  className="flex-1 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-2 py-2 text-sm"
+                >
+                  {linkable.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.title}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  className="rounded-md border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                >
+                  Link
+                </button>
+              </div>
+            </form>
+          ) : related.length === 0 ? null : (
+            <p className="text-xs text-zinc-500">
+              No other memories available to link.
+            </p>
           )}
         </div>
       </details>

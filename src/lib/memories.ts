@@ -498,3 +498,133 @@ export async function searchFtsIds(
   );
   return rows.map((r) => r.id);
 }
+
+const MAX_RELATED_LINKS = 20;
+
+/** Fetch non-deleted memories by a set of ids (order agnostic). */
+export async function listMemoriesByIds(
+  ids: string[],
+): Promise<MemoryWithTags[]> {
+  if (ids.length === 0) return [];
+  const rows = await prisma.memory.findMany({
+    where: { id: { in: ids }, deletedAt: null },
+    include: { project: true },
+  });
+  return rows.map(withTags);
+}
+
+/**
+ * Resolve the related-memories array for a memory: parses `relatedIds`,
+ * fetches the still-existing, non-deleted memories and returns them in the
+ * order preserved by the stored JSON array.
+ */
+export async function getRelatedMemories(
+  id: string,
+): Promise<MemoryWithTags[]> {
+  const mem = await prisma.memory.findUnique({
+    where: { id },
+    include: { project: true },
+  });
+  if (!mem) return [];
+  const ids = parseRelatedIds((mem as MemoryRow).relatedIds);
+  if (ids.length === 0) return [];
+  const rows = await prisma.memory.findMany({
+    where: { id: { in: ids }, deletedAt: null },
+    include: { project: true },
+  });
+  const byId = new Map(rows.map((r) => [r.id, withTags(r as MemoryRow)]));
+  return ids.map((rid) => byId.get(rid)).filter(Boolean) as MemoryWithTags[];
+}
+
+/**
+ * Add links to a memory's `relatedIds`. Inputs are validated: each id must
+ * exist and must not be the memory itself or already linked. The final array
+ * is capped at `MAX_RELATED_LINKS` (extra inputs past that are dropped,
+ * preserving stored order). Returns `{ relatedIds }`.
+ */
+export async function addLinks(
+  id: string,
+  addIds: string[],
+): Promise<{ relatedIds: string[] }> {
+  const mem = await prisma.memory.findUnique({
+    where: { id },
+    include: { project: true },
+  });
+  if (!mem) {
+    throw new Error("Memory not found");
+  }
+  const current = parseRelatedIds((mem as MemoryRow).relatedIds);
+
+  // Validate incoming ids: drop self, drop dups, drop already-linked.
+  const seen = new Set(current);
+  const cleaned = addIds.filter((rid) => rid && rid !== id && !seen.has(rid));
+  if (cleaned.length === 0) {
+    return { relatedIds: current };
+  }
+
+  // Confirm each cleaned id resolves to a real, non-deleted memory.
+  const exists = await prisma.memory.findMany({
+    where: { id: { in: cleaned }, deletedAt: null },
+    select: { id: true },
+  });
+  const existsSet = new Set(exists.map((r) => r.id));
+  const valid = cleaned.filter((rid) => existsSet.has(rid));
+
+  const merged = [...current, ...valid].slice(0, MAX_RELATED_LINKS);
+  await prisma.memory.update({
+    where: { id },
+    data: { relatedIds: stringifyRelatedIds(merged) },
+  });
+  return { relatedIds: merged };
+}
+
+/** Remove ids from a memory's `relatedIds`. Returns `{ relatedIds }`. */
+export async function removeLinks(
+  id: string,
+  removeIds: string[],
+): Promise<{ relatedIds: string[] }> {
+  const mem = await prisma.memory.findUnique({ where: { id } });
+  if (!mem) {
+    throw new Error("Memory not found");
+  }
+  const remove = new Set(removeIds.filter(Boolean));
+  const current = parseRelatedIds((mem as MemoryRow).relatedIds);
+  const next = current.filter((rid) => !remove.has(rid));
+  if (next.length !== current.length) {
+    await prisma.memory.update({
+      where: { id },
+      data: { relatedIds: stringifyRelatedIds(next) },
+    });
+  }
+  return { relatedIds: next };
+}
+
+export type LinkableMemory = {
+  id: string;
+  title: string;
+  type: string;
+  updatedAt: Date;
+};
+
+/**
+ * Candidate memories the user can link to the target memory: non-deleted,
+ * excluding the target itself and any ids already linked. Capped at 100 and
+ * sorted by most-recently-updated for the UI dropdown.
+ */
+export async function listLinkableMemories(
+  id: string,
+): Promise<LinkableMemory[]> {
+  const mem = await prisma.memory.findUnique({ where: { id } });
+  if (!mem) return [];
+  const alreadyLinked = new Set([
+    id,
+    ...parseRelatedIds((mem as MemoryRow).relatedIds),
+  ]);
+  const rows = await prisma.memory.findMany({
+    where: { deletedAt: null, id: { notIn: Array.from(alreadyLinked) } },
+    orderBy: { updatedAt: "desc" },
+    take: 100,
+    select: { id: true, title: true, type: true, updatedAt: true },
+  });
+  return rows as LinkableMemory[];
+}
