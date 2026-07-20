@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""Export memories from Mnemo in JSON or markdown form.
+
+    python session_export.py --format markdown --project hermes --max-chars 4000
+    python session_export.py --format json --project all --limit 200
+
+JSON calls GET /api/memories; markdown calls GET /api/export. Auth and
+retry are handled by mnemo_common (loads ~/code/mnemo/.env then ~/.hermes/.env).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+
+from mnemo_common import auth_headers, build_url, get_base_url, load_env, request_with_retry
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description="Export memories from Mnemo")
+    p.add_argument("--format", choices=["json", "markdown"], default="markdown")
+    p.add_argument("--project", default="global", help="slug | id | all | global")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--offset", type=int, default=0)
+    p.add_argument("--sort", choices=["newest", "oldest", "updated"], default="newest")
+    p.add_argument("--q", default=None, help="query (keyword relevance)")
+    p.add_argument("--max-chars", dest="max_chars", type=int, default=None)
+    p.add_argument("--priority", choices=["importance", "recent", "query"], default=None)
+    p.add_argument("--include-expired", dest="include_expired", action="store_true")
+    args = p.parse_args()
+
+    env = load_env()
+    base = get_base_url(env)
+    headers = auth_headers(env)
+
+    if args.format == "json":
+        params = {
+            "project": args.project,
+            "limit": args.limit,
+            "offset": args.offset,
+            "sort": args.sort,
+            "q": args.q,
+        }
+        url = build_url(base, "/api/memories", params)
+        resp = request_with_retry("GET", url, headers=headers)
+        if resp.status_code != 200:
+            sys.stderr.write(f"HTTP {resp.status_code}: {resp.text}\n")
+            return 1
+        total = resp.headers.get("X-Total-Count", "?")
+        data = resp.json()
+        sys.stdout.write(json.dumps(data, indent=2))
+        sys.stderr.write(f"\n# X-Total-Count: {total}\n")
+        return 0
+
+    # markdown
+    params = {
+        "project": args.project,
+        "max_chars": args.max_chars,
+        "priority": args.priority if (args.priority or args.q) else "recent",
+        "q": args.q,
+        "include_expired": "true" if args.include_expired else None,
+    }
+    url = build_url(base, "/api/export", params)
+    resp = request_with_retry("GET", url, headers=headers)
+    if resp.status_code != 200:
+        sys.stderr.write(f"HTTP {resp.status_code}: {resp.text}\n")
+        return 1
+    sys.stdout.write(resp.text)
+    sys.stderr.write(
+        f"\n# X-Mnemo-Tokens: {resp.headers.get('X-Mnemo-Tokens', '?')}"
+        f"  X-Mnemo-Count: {resp.headers.get('X-Mnemo-Count', '?')}\n"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
