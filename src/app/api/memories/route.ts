@@ -2,6 +2,10 @@ import { ZodError } from "zod";
 import { listMemories, createMemory } from "@/lib/memories";
 import { getProjectBySlug, createProject } from "@/lib/projects";
 import {
+  findPossibleDuplicates,
+  backfillEmbeddingForMemory,
+} from "@/lib/search";
+import {
   memoryApiCreateSchema,
   memoryFiltersSchema,
   normalizeSlug,
@@ -105,6 +109,28 @@ export async function POST(request: Request) {
     projectId = project.id;
   }
 
+  // Duplicate detection (overridable via header or body field).
+  const allowDuplicate =
+    request.headers.get("x-allow-duplicate") === "true" ||
+    parsed.allowDuplicate === true;
+  if (!allowDuplicate) {
+    const dup = await findPossibleDuplicates({
+      title: parsed.title,
+      content: parsed.content,
+      projectId,
+    });
+    if (dup.length > 0) {
+      return Response.json(
+        {
+          error: "possible_duplicate",
+          similar: dup,
+          suggestion: "Use PUT /api/memories/[id] to update instead",
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   const input: MemoryCreateInput = {
     type: parsed.type,
     title: parsed.title,
@@ -117,5 +143,13 @@ export async function POST(request: Request) {
   };
 
   const created = await createMemory(input);
+
+  // Fire-and-forget embedding generation.
+  void backfillEmbeddingForMemory(
+    created.id,
+    created.title,
+    created.content,
+  );
+
   return Response.json(created, { status: 201 });
 }

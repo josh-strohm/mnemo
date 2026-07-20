@@ -1,6 +1,7 @@
 import { ZodError } from "zod";
 import { getMemory, updateMemoryPartial, deleteMemory } from "@/lib/memories";
 import { getProjectBySlug, createProject } from "@/lib/projects";
+import { backfillEmbeddingForMemory } from "@/lib/search";
 import { memoryApiUpdateSchema, normalizeSlug } from "@/lib/schemas";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -84,6 +85,8 @@ export async function PUT(
     if (!updated) {
       return Response.json({ error: "Not found" }, { status: 404 });
     }
+    // Re-generate embedding if text may have changed.
+    void backfillEmbeddingForMemory(updated.id, updated.title, updated.content);
     return Response.json(updated);
   } catch (err) {
     if (
