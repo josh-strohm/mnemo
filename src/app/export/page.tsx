@@ -16,6 +16,7 @@ export default async function ExportPage({
     listProjects(),
     compileExport(selection as string | "global" | "all"),
   ]);
+  const markdown = compiled.markdown;
 
   return (
     <AutoRefresh>
@@ -49,11 +50,11 @@ export default async function ExportPage({
         <span className="text-sm text-zinc-500">
           Paste this block into your repo&apos;s AGENTS.md.
         </span>
-        <CopyButton text={compiled} />
+        <CopyButton text={markdown} />
       </div>
 
       <pre className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4 text-xs overflow-x-auto whitespace-pre-wrap">
-        {compiled}
+        {markdown}
       </pre>
     </div>
     </AutoRefresh>
