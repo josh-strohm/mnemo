@@ -8,31 +8,64 @@ datasource db {
 }
 
 model Project {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  memories  Memory[]
+  id               String   @id @default(cuid())
+  name             String
+  slug             String   @unique
+  description      String?
+  color            String?
+  icon             String?
+  defaultImportance Float   @default(0.5)
+  isArchived       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  memories         Memory[]
+
+  @@index([isArchived])
 }
 
 model Memory {
-  id             String    @id @default(cuid())
-  type           String
-  title          String
-  content        String
-  tags           String
-  projectId      String?
-  project        Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  importance     Float     @default(0.5)
-  expiresAt      DateTime?
-  lastAccessedAt DateTime?
-  source         String?
-  embedding      String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  type             String
+  title            String
+  content          String
+  tags             String
+  projectId        String?
+  project          Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  importance       Float     @default(0.5)
+  expiresAt        DateTime?
+  lastAccessedAt   DateTime?
+  source           String?
+  sourceSessionId  String?
+  createdBy        String?
+  sourceUrl        String?
+  relatedIds       String    @default("[]")
+  deletedAt        DateTime?
+  embedding        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  versions         MemoryVersion[]
 
   @@index([projectId])
   @@index([type])
   @@index([updatedAt])
+  @@index([deletedAt])
+}
+
+model MemoryVersion {
+  id          String   @id @default(cuid())
+  memoryId    String
+  memory      Memory   @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  version     Int
+  title       String
+  content     String
+  tags        String
+  type        String
+  importance  Float
+  projectId   String?
+  source      String?
+  createdAt   DateTime @default(now())
+
+  @@unique([memoryId, version])
+  @@index([memoryId])
+  @@index([memoryId, version])
 }

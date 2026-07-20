@@ -19,10 +19,51 @@ const stripped = sql
   .split(/\r?\n/)
   .filter((line) => !line.trim().startsWith("--"))
   .join("\n");
-const statements = stripped
-  .split(/;\s*/)
-  .map((s) => s.trim())
-  .filter((s) => s.length > 0);
+// Split on statement-ending semicolons, keeping BEGIN ... END; trigger
+// bodies intact (they contain inner semicolons). Balanced against the
+// keyword count so CREATE TRIGGER ... BEGIN ...; END stays one statement.
+const statements = [];
+{
+  let depth = 0;
+  let buf = "";
+  const lower = stripped.toLowerCase();
+  let i = 0;
+  while (i < stripped.length) {
+    const ch = stripped[i];
+    const atBegin = isKeywordAt(lower, i, "begin");
+    const atEnd = isKeywordAt(lower, i, "end");
+    if (atBegin) {
+      depth++;
+      buf += stripped.slice(i, i + 5);
+      i += 5;
+      continue;
+    }
+    if (atEnd) {
+      if (depth > 0) depth--;
+      buf += stripped.slice(i, i + 3);
+      i += 3;
+      continue;
+    }
+    if (ch === ";" && depth === 0) {
+      const trimmed = buf.replace(/;$/, "").trim();
+      if (trimmed.length > 0) statements.push(trimmed);
+      buf = "";
+      i++;
+      continue;
+    }
+    buf += ch;
+    i++;
+  }
+  const tail = buf.trim();
+  if (tail.length > 0) statements.push(tail);
+}
+
+function isKeywordAt(s, i, kw) {
+  if (s.slice(i, i + kw.length) !== kw) return false;
+  const before = i === 0 ? " " : s[i - 1];
+  const after = s[i + kw.length] ?? " ";
+  return /[^a-z0-9_]/.test(before) && /[^a-z0-9_]/.test(after);
+}
 
 let applied = 0;
 let skipped = 0;

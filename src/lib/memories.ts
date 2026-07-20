@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { scoreMemoryAgainstQuery, tokenizeQuery } from "@/lib/scoring";
+import { createVersionSnapshot } from "@/lib/versions";
 import {
   parseDbTags,
   tagsToDbString,
@@ -269,6 +270,14 @@ export async function createMemory(
 export async function updateMemory(
   input: MemoryUpdateInput,
 ): Promise<MemoryWithTags> {
+  const existing = await prisma.memory.findUnique({ where: { id: input.id } });
+  if (existing) {
+    try {
+      await createVersionSnapshot(withTags(existing));
+    } catch {
+      // non-critical
+    }
+  }
   const updated = await prisma.memory.update({
     where: { id: input.id },
     data: {
@@ -290,6 +299,15 @@ export async function updateMemoryPartial(
   input: MemoryApiUpdateInput,
   resolvedProjectId: string | null,
 ): Promise<MemoryWithTags | null> {
+  const existing = await prisma.memory.findUnique({ where: { id } });
+  if (!existing) return null;
+  // Snapshot the pre-update state for version history before mutating.
+  try {
+    await createVersionSnapshot(withTags(existing));
+  } catch {
+    // non-critical: don't fail the update over a missed snapshot
+  }
+
   const data: Record<string, unknown> = {};
   if (input.type !== undefined) data.type = input.type;
   if (input.title !== undefined) data.title = input.title;
