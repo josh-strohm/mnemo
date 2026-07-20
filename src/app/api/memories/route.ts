@@ -3,32 +3,63 @@ import { listMemories, createMemory } from "@/lib/memories";
 import { getProjectBySlug, createProject } from "@/lib/projects";
 import {
   memoryApiCreateSchema,
+  memoryFiltersSchema,
   normalizeSlug,
   type MemoryCreateInput,
 } from "@/lib/schemas";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const project = url.searchParams.get("project") ?? "all";
+  const projectParam = url.searchParams.get("project") ?? "all";
 
   let filterProject: string | "global" | undefined = undefined;
-  if (project === "all") {
+  if (projectParam === "all") {
     filterProject = undefined;
-  } else if (project === "global") {
+  } else if (projectParam === "global") {
     filterProject = "global";
   } else {
-    const found = await getProjectBySlug(project);
+    const found = await getProjectBySlug(projectParam);
     if (!found) {
       return Response.json(
-        { error: `Project not found: ${project}` },
+        { error: `Project not found: ${projectParam}` },
         { status: 404 },
       );
     }
     filterProject = found.id;
   }
 
-  const memories = await listMemories({ project: filterProject });
-  return Response.json(memories, { status: 200 });
+  let filters;
+  try {
+    filters = memoryFiltersSchema.parse({
+      q: url.searchParams.get("q") ?? undefined,
+      type: url.searchParams.get("type") ?? undefined,
+      project: filterProject,
+      tag: url.searchParams.get("tag") ?? undefined,
+      limit: url.searchParams.get("limit") ?? undefined,
+      offset: url.searchParams.get("offset") ?? undefined,
+      sort: url.searchParams.get("sort") ?? undefined,
+    });
+  } catch (err) {
+    if (err instanceof ZodError) {
+      return Response.json(
+        { error: "Validation failed", issues: err.issues },
+        { status: 400 },
+      );
+    }
+    return Response.json(
+      { error: "Unexpected validation error" },
+      { status: 400 },
+    );
+  }
+
+  const { items, total } = await listMemories(filters);
+  return new Response(JSON.stringify(items), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Total-Count": String(total),
+    },
+  });
 }
 
 export async function POST(request: Request) {
@@ -80,6 +111,9 @@ export async function POST(request: Request) {
     content: parsed.content,
     tags: parsed.tags,
     projectId,
+    importance: parsed.importance,
+    expiresAt: parsed.expiresAt,
+    source: parsed.source,
   };
 
   const created = await createMemory(input);

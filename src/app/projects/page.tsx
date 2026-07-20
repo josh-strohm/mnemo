@@ -7,7 +7,7 @@ export default async function ProjectsPage() {
 
   const counts = new Map<string, number>();
   if (projects.length > 0) {
-    const allMemories = await listMemories({});
+    const { items: allMemories } = await listMemories({});
     for (const m of allMemories) {
       if (m.projectId) {
         counts.set(m.projectId, (counts.get(m.projectId) ?? 0) + 1);

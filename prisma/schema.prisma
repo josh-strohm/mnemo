@@ -17,16 +17,22 @@ model Project {
 }
 
 model Memory {
-  id        String   @id @default(cuid())
-  type      String
-  title     String
-  content   String
-  tags      String
-  projectId String?
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String    @id @default(cuid())
+  type           String
+  title          String
+  content        String
+  tags           String
+  projectId      String?
+  project        Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  importance     Float     @default(0.5)
+  expiresAt      DateTime?
+  lastAccessedAt DateTime?
+  source         String?
+  embedding      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([projectId])
   @@index([type])
+  @@index([updatedAt])
 }

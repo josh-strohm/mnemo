@@ -19,7 +19,7 @@ export default async function ProjectDetailPage({
     notFound();
   }
 
-  const memories = await listMemories({ project: project.id });
+  const { items: memories } = await listMemories({ project: project.id, sort: "newest" });
 
   return (
     <AutoRefresh>
