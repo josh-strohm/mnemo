@@ -5,7 +5,7 @@ import "dotenv/config";
 import { createClient } from "@libsql/client";
 import { readFileSync } from "node:fs";
 
-const file = process.argv[2] ?? "prisma/migrations/0001_tier1.sql";
+const file = process.argv[2] ?? "db/migrations/0001_tier1.sql";
 
 const db = createClient({
   url: process.env.DATABASE_URL,

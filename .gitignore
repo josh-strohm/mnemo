@@ -47,3 +47,7 @@ next-env.d.ts
 /src/generated/
 
 /src/generated/prisma
+
+# python
+__pycache__/
+*.pyc

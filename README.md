@@ -184,4 +184,4 @@ npm run db:migrate        # runs scripts/migrate.mjs against DATABASE_URL (idemp
 npm run db:apply          # applies the full schema.sql (safe for fresh databases)
 ```
 
-`scripts/migrate.mjs` continues past per-statement errors (e.g. a column already exists), so re-running is a no-op. The migration file is `prisma/migrations/0001_tier1.sql` for manual review/application.
+`scripts/migrate.mjs` continues past per-statement errors (e.g. a column already exists), so re-running is a no-op. The migration file is `db/migrations/0001_tier1.sql` for manual review/application.
