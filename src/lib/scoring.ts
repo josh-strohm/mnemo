@@ -19,6 +19,13 @@ export function tokenizeQuery(q: string): string[] {
 
 const dayMs = 24 * 60 * 60 * 1000;
 
+function isNumberToken(token: string): boolean {
+  // A token that contains a run of 3+ digits (pure numbers like 21454, or
+  // dotted/IPv4 tokens like 195.26.248.26) is treated as a high-signal
+  // "number match" worth 10 points when it appears verbatim.
+  return /\d{3,}/.test(token);
+}
+
 export function scoreMemoryAgainstQuery(args: {
   title: string;
   content: string;
@@ -37,10 +44,10 @@ export function scoreMemoryAgainstQuery(args: {
   const matched = new Set<string>();
 
   for (const token of tokens) {
-    const isNumberToken = /^\d{3,}$/.test(token);
+    const isNum = isNumberToken(token);
     let matchedThis = false;
 
-    if (isNumberToken) {
+    if (isNum) {
       if (titleLower.includes(token) || contentLower.includes(token)) {
         score += 10;
         matchedThis = true;
