@@ -27,8 +27,10 @@ Open [http://localhost:3000](http://localhost:3000) — you'll be redirected to 
 - `npm run dev` — dev server
 - `npm run build` — production build
 - `npm run check` — typecheck + lint
-- `npm run db:push` — push schema to database
-- `npm run db:generate` — regenerate Prisma client
+- `npm run db:generate` — regenerate Prisma client from `schema.prisma`
+- `npm run db:apply` — apply the full `schema.sql` to Turso (idempotent)
+- `npm run db:migrate` — apply additive migrations from `prisma/migrations/`
+- `npm run db:sql` — print the full `CREATE TABLE` SQL for manual review
 
 ## Turso Database Setup
 
@@ -127,6 +129,59 @@ Mnemo exposes a REST API for external AI agents under `/api/*`. All API routes r
 
 ### Endpoints
 
-- `GET /api/export?project=<slug>` — compiled markdown block (`text/markdown`)
-- `GET /api/memories?project=<slug>` — JSON list of memories
-- `POST /api/memories` — create a memory (JSON body: `{ type, title, content, tags?, projectSlug? }`)
+#### Export
+
+- `GET /api/export?project=<slug|all|global>&max_chars=<n>&priority=<importance|recent|query>&q=<query>&include_expired=<true|false>` — compiled markdown block (`text/markdown`)
+  - Response headers: `X-Mnemo-Tokens` (≈ chars/4 estimate) and `X-Mnemo-Count` (`included/total`).
+  - `max_chars` trims the lowest-priority memories to fit a token budget; an omitted-count footer is appended when memories are dropped.
+  - `priority=importance` sorts by importance desc then recency; `recent` by `updatedAt` desc; `query` by relevance to `q`.
+  - Expired memories (`expiresAt` in the past) are excluded unless `include_expired=true`.
+  - Included memories get `lastAccessedAt` updated.
+
+#### Memories
+
+- `GET /api/memories?project=<slug|all|global>&q=<query>&type=<LESSON|CONVENTION|DECISION|FACT>&tag=<tag>&limit=<n>&offset=<n>&sort=<newest|oldest|updated>` — JSON list. Response header `X-Total-Count` gives the total matching count before pagination (`limit` default 50, max 200; `offset` default 0).
+- `GET /api/memories/[id]` — single memory (404 if not found). Touches `lastAccessedAt`.
+- `POST /api/memories` — create. Body: `{ type, title, content, tags?: string[], projectSlug?, importance?, expiresAt?, source? }`. Detects likely duplicates (same project scope) and returns `409` with `{ error: "possible_duplicate", similar: [...], suggestion }` unless overridden via header `X-Allow-Duplicate: true` or body `{ allowDuplicate: true }`.
+- `PUT /api/memories/[id]` — partial update; omit fields to keep their current values. `{ type?, title?, content?, tags?, projectId?, projectSlug?, importance?, expiresAt?, source? }`. Use `projectSlug: null` (or `projectId: null`) for global scope.
+- `DELETE /api/memories/[id]` — hard delete; returns `{ ok: true, id }` (404 if not found).
+
+`importance` is 0.0–1.0 (default 0.5). `expiresAt` is an ISO 8601 string. `source` is one of `USER_SAID | AGENT_INFERRED | CORRECTION | IMPORTED`.
+
+#### Search
+
+- `GET /api/search?q=<query>&project=<slug|id|all|global>&k=<n>&include_expired=<true|false>` — JSON array of ranked hits (`{ ...memory, score, matchedTokens }`), sorted by score desc.
+  - Hybrid scoring: when an `OPENAI_API_KEY` is configured and memories have embeddings, cosine similarity (0.7) is blended with normalized keyword score (0.3); otherwise pure tokenized keyword scoring (title 3, content 1, tag 5, and `q` tokens containing a 3+ digit run e.g. an IP get a 10-point exact match) plus a small recency boost.
+  - Without `OPENAI_API_KEY`, search still works via the keyword path.
+
+### Embeddings (optional)
+
+Set `OPENAI_API_KEY` to enable OpenAI `text-embedding-3-small` embeddings. On create/update, embeddings are generated asynchronously (best-effort, never blocks the response). `EMBEDDINGS_ENABLED` auto-activates when the key is present; the app degrades gracefully to keyword search when unset.
+
+### Python client scripts
+
+`scripts/` ships ready-to-run clients (shared `mnemo_common.py`). Auth config loads `~/code/mnemo/.env` then falls back to `~/.hermes/.env`; requests retry twice (1s backoff) on 5xx.
+
+```bash
+python scripts/session_export.py --format markdown --project hermes --max-chars 4000   # GET /api/export
+python scripts/session_export.py --format json --project all --offset 0 --limit 200     # GET /api/memories
+python scripts/store_memory.py --type FACT --title "VPS IP" --content "195.26.248.26" \
+  --project-slug hermes --tags vps,infra --importance 0.8 --source USER_SAID
+python scripts/update_memory.py --id <id> --title "New title" --content "New body"
+python scripts/delete_memory.py --id <id>
+python scripts/search_memory.py --q "front bolt keys" --project my-house --k 5
+python scripts/backfill_embeddings.py --dry-run        # then without --dry-run to generate
+```
+
+## Database migrations
+
+Schema changes are additive and safe for existing data. The canonical schema lives in `schema.sql` (idempotent `CREATE TABLE IF NOT EXISTS` + indexes).
+
+To apply the Tier 1 migration (adds `importance`, `expiresAt`, `lastAccessedAt`, `source`, `embedding` and the `updatedAt` index) to an existing Turso database:
+
+```bash
+npm run db:migrate        # runs scripts/migrate.mjs against DATABASE_URL (idempotent)
+npm run db:apply          # applies the full schema.sql (safe for fresh databases)
+```
+
+`scripts/migrate.mjs` continues past per-statement errors (e.g. a column already exists), so re-running is a no-op. The migration file is `prisma/migrations/0001_tier1.sql` for manual review/application.
