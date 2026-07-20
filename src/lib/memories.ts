@@ -220,8 +220,15 @@ export async function listAllForProject(
 }
 
 export async function listGlobalAndProject(
-  projectId: string,
+  projectId: string | null,
 ): Promise<MemoryWithTags[]> {
+  if (projectId === null) {
+    const rows = await prisma.memory.findMany({
+      where: { projectId: null },
+      include: { project: true },
+    });
+    return rows.map(withTags);
+  }
   const rows = await prisma.memory.findMany({
     where: { OR: [{ projectId }, { projectId: null }] },
     include: { project: true },
