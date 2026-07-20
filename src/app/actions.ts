@@ -12,7 +12,10 @@ import {
   createMemory,
   updateMemory,
   deleteMemory,
+  restoreMemory,
+  updateMemoryPartial,
 } from "@/lib/memories";
+import { restoreVersion } from "@/lib/versions";
 import {
   createProject,
   updateProject,
@@ -72,9 +75,38 @@ export async function updateMemoryAction(formData: FormData) {
 
 export async function deleteMemoryAction(formData: FormData) {
   const id = requireString(formData, "id");
+  // UI delete = soft by default (recoverable from /trash).
   await deleteMemory(id);
   revalidatePath("/memories");
+  revalidatePath("/trash");
   redirect("/memories");
+}
+
+export async function restoreMemoryAction(formData: FormData) {
+  const id = requireString(formData, "id");
+  await restoreMemory(id);
+  revalidatePath("/trash");
+  revalidatePath("/memories");
+  redirect("/trash");
+}
+
+export async function hardDeleteMemoryAction(formData: FormData) {
+  const id = requireString(formData, "id");
+  await deleteMemory(id, { hard: true });
+  revalidatePath("/trash");
+  revalidatePath("/memories");
+  redirect("/trash");
+}
+
+export async function restoreVersionAction(formData: FormData) {
+  const id = requireString(formData, "id");
+  const versionId = requireString(formData, "versionId");
+  await restoreVersion(id, versionId, (memId, fields) =>
+    updateMemoryPartial(memId, fields, fields.projectId),
+  );
+  revalidatePath("/memories");
+  revalidatePath(`/memories/${id}`);
+  redirect(`/memories/${id}`);
 }
 
 export async function createProjectAction(formData: FormData) {

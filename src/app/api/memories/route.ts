@@ -39,6 +39,7 @@ export async function GET(request: Request) {
       type: url.searchParams.get("type") ?? undefined,
       project: filterProject,
       tag: url.searchParams.get("tag") ?? undefined,
+      includeDeleted: url.searchParams.get("include_deleted") ?? undefined,
       limit: url.searchParams.get("limit") ?? undefined,
       offset: url.searchParams.get("offset") ?? undefined,
       sort: url.searchParams.get("sort") ?? undefined,

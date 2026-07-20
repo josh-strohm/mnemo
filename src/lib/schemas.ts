@@ -194,6 +194,7 @@ export const memoryFiltersSchema = z.object({
     },
   ),
   tag: emptyStringToUndefined,
+  includeDeleted: optionalBoolean(false),
   limit: optionalInt(1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE),
   offset: optionalInt(0, 1_000_000, 0),
   sort: optionalEnum(SORT_OPTIONS, "newest"),
@@ -203,6 +204,7 @@ export type MemoryFilters = {
   type?: MemoryType;
   project?: string | "global";
   tag?: string;
+  includeDeleted?: boolean;
   limit: number;
   offset: number;
   sort: SortOption;

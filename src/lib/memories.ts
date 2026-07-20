@@ -7,7 +7,6 @@ import {
   DEFAULT_PAGE_SIZE,
   type MemoryCreateInput,
   type MemoryUpdateInput,
-  type MemoryApiUpdateInput,
   type MemoryFilters,
 } from "@/lib/schemas";
 
@@ -22,6 +21,11 @@ export type MemoryWithTags = {
   expiresAt: Date | null;
   lastAccessedAt: Date | null;
   source: string | null;
+  sourceSessionId: string | null;
+  createdBy: string | null;
+  sourceUrl: string | null;
+  relatedIds: string[];
+  deletedAt: Date | null;
   embedding: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -38,6 +42,11 @@ type MemoryRow = {
   expiresAt: Date | null;
   lastAccessedAt: Date | null;
   source: string | null;
+  sourceSessionId: string | null;
+  createdBy: string | null;
+  sourceUrl: string | null;
+  relatedIds: string;
+  deletedAt: Date | null;
   embedding: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -55,21 +64,50 @@ function withTags(m: MemoryRow): MemoryWithTags {
     expiresAt: m.expiresAt,
     lastAccessedAt: m.lastAccessedAt,
     source: m.source,
+    sourceSessionId: m.sourceSessionId,
+    createdBy: m.createdBy,
+    sourceUrl: m.sourceUrl,
+    relatedIds: parseRelatedIds(m.relatedIds),
+    deletedAt: m.deletedAt,
     embedding: m.embedding,
     createdAt: m.createdAt,
     updatedAt: m.updatedAt,
   };
 }
 
+function parseRelatedIds(json: string | null): string[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((x): x is string => typeof x === "string");
+    }
+  } catch {
+    // not JSON
+  }
+  return [];
+}
+
+export function stringifyRelatedIds(ids: string[]): string {
+  return JSON.stringify(ids);
+}
+
 type ListResult = { items: MemoryWithTags[]; total: number };
 
-function baseWhere(filters: MemoryFilters): Record<string, unknown> {
+function baseWhere(
+  filters: Partial<MemoryFilters>,
+): Record<string, unknown> {
   const where: Record<string, unknown> = {};
   if (filters.type) where.type = filters.type;
   if (filters.project === "global") {
     where.projectId = null;
   } else if (filters.project) {
     where.projectId = filters.project;
+  }
+  // Soft-delete: exclude deleted memories by default, unless the caller
+  // explicitly opts in via includeDeleted.
+  if (filters.includeDeleted !== true) {
+    where.deletedAt = null;
   }
   return where;
 }
@@ -97,6 +135,7 @@ export async function listMemories(
     type: rawFilters.type,
     project: rawFilters.project,
     tag: rawFilters.tag,
+    includeDeleted: rawFilters.includeDeleted ?? false,
     limit: rawFilters.limit ?? DEFAULT_PAGE_SIZE,
     offset: rawFilters.offset ?? 0,
     sort: rawFilters.sort ?? "newest",
@@ -192,9 +231,16 @@ export async function listAllForExport(
   filters: Omit<MemoryFilters, "limit" | "offset" | "sort"> & {
     excludeExpired?: boolean;
     includeExpired?: boolean;
+    includeDeleted?: boolean;
   },
 ): Promise<MemoryWithTags[]> {
-  const where = baseWhere({ ...filters, limit: 0, offset: 0, sort: "newest" });
+  const where = baseWhere({
+    ...filters,
+    includeDeleted: filters.includeDeleted,
+    limit: 0,
+    offset: 0,
+    sort: "newest",
+  });
   const now = new Date();
   const rows = await prisma.memory.findMany({
     where,
@@ -294,10 +340,26 @@ export async function updateMemory(
   return withTags(updated);
 }
 
+export type MemoryUpdatePatch = {
+  type?: string;
+  title?: string;
+  content?: string;
+  tags?: string[];
+  projectId?: string | null;
+  projectSlug?: string | null;
+  importance?: number;
+  expiresAt?: Date | null;
+  source?: string | null;
+  sourceSessionId?: string | null;
+  createdBy?: string | null;
+  sourceUrl?: string | null;
+  relatedIds?: string[];
+};
+
 export async function updateMemoryPartial(
   id: string,
-  input: MemoryApiUpdateInput,
-  resolvedProjectId: string | null,
+  input: MemoryUpdatePatch,
+  resolvedProjectId: string | null | undefined,
 ): Promise<MemoryWithTags | null> {
   const existing = await prisma.memory.findUnique({ where: { id } });
   if (!existing) return null;
@@ -336,6 +398,55 @@ export async function setEmbedding(
   });
 }
 
-export async function deleteMemory(id: string): Promise<void> {
-  await prisma.memory.delete({ where: { id } });
+export async function deleteMemory(
+  id: string,
+  opts: { hard?: boolean } = {},
+): Promise<{ ok: true; soft: boolean; id: string } | null> {
+  const existing = await prisma.memory.findUnique({ where: { id } });
+  if (!existing) return null;
+
+  if (opts.hard === true) {
+    // Hard delete: cascade drops versions (FK onDelete: Cascade).
+    await prisma.memory.delete({ where: { id } });
+    return { ok: true, soft: false, id };
+  }
+
+  // Soft delete: snapshot current state first (so the deletion is undoable
+  // via /restore), then mark deletedAt.
+  try {
+    await createVersionSnapshot(withTags(existing));
+  } catch {
+    // non-critical
+  }
+  await prisma.memory.update({
+    where: { id },
+    data: { deletedAt: new Date(), lastAccessedAt: new Date() },
+  });
+  return { ok: true, soft: true, id };
+}
+
+export async function restoreMemory(
+  id: string,
+): Promise<MemoryWithTags | null> {
+  const m = await prisma.memory.update({
+    where: { id },
+    data: { deletedAt: null },
+  });
+  return withTags(m);
+}
+
+export async function listDeleted(): Promise<MemoryWithTags[]> {
+  const rows = await prisma.memory.findMany({
+    where: { NOT: { deletedAt: null } },
+    orderBy: { deletedAt: "desc" },
+    include: { project: true },
+  });
+  return rows.map(withTags);
+}
+
+export async function purgeExpired(deletedBefore: Date): Promise<number> {
+  const res = await prisma.memory.deleteMany({
+    where: { deletedAt: { lt: deletedBefore } },
+  });
+  return res.count;
 }

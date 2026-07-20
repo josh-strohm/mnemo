@@ -100,12 +100,18 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   ctx: RouteContext,
 ) {
   const { id } = await ctx.params;
+  const url = new URL(request.url);
+  const hard = url.searchParams.get("hard") === "true";
   try {
-    await deleteMemory(id);
+    const result = await deleteMemory(id, { hard });
+    if (!result) {
+      return Response.json({ error: "Not found" }, { status: 404 });
+    }
+    return Response.json(result);
   } catch (err) {
     if (
       err instanceof Error &&
@@ -115,5 +121,4 @@ export async function DELETE(
     }
     throw err;
   }
-  return Response.json({ ok: true, id });
 }
