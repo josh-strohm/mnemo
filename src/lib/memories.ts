@@ -256,7 +256,7 @@ export async function listAllForExport(
 export async function listAllForProject(
   projectId: string | null,
 ): Promise<MemoryWithTags[]> {
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { deletedAt: null };
   if (projectId === null) {
     where.projectId = null;
   } else {
@@ -269,15 +269,16 @@ export async function listAllForProject(
 export async function listGlobalAndProject(
   projectId: string | null,
 ): Promise<MemoryWithTags[]> {
+  const deletedClause = { deletedAt: null };
   if (projectId === null) {
     const rows = await prisma.memory.findMany({
-      where: { projectId: null },
+      where: { projectId: null, ...deletedClause },
       include: { project: true },
     });
     return rows.map(withTags);
   }
   const rows = await prisma.memory.findMany({
-    where: { OR: [{ projectId }, { projectId: null }] },
+    where: { OR: [{ projectId }, { projectId: null }], ...deletedClause },
     include: { project: true },
   });
   return rows.map(withTags);
@@ -449,4 +450,42 @@ export async function purgeExpired(deletedBefore: Date): Promise<number> {
     where: { deletedAt: { lt: deletedBefore } },
   });
   return res.count;
+}
+
+/**
+ * Full-text search over the `MemoryFts` virtual table (FTS5, porter
+ * unicode61 tokenizer). Returns memory ids whose title/content/tags match
+ * the query tokens (implicit AND). Quoted tokens neutralise FTS5 special
+ * syntax so user input can't break the MATCH clause or inject operators.
+ *
+ * Returns `null` when the query has no usable tokens (caller should fall
+ * back to a full scan); returns `[]` when tokens exist but nothing matched.
+ */
+export async function searchFtsIds(
+  q: string,
+  opts: { includeDeleted?: boolean; limit?: number } = {},
+): Promise<string[] | null> {
+  const tokens = tokenizeQuery(q);
+  if (tokens.length === 0) return null;
+  const match = tokens
+    .filter((t) => t.length > 0)
+    .map((t) => `"${t.replace(/"/g, '""')}"`)
+    .join(" ");
+  if (!match) return null;
+
+  const deletedClause =
+    opts.includeDeleted !== true ? 'AND m."deletedAt" IS NULL' : "";
+  const limit = Math.max(1, Math.min(opts.limit ?? 500, 1000));
+
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT m."id" AS id
+       FROM "MemoryFts" f
+       JOIN "Memory" m ON m."id" = f."memoryId"
+      WHERE "MemoryFts" MATCH ?
+      ${deletedClause}
+      LIMIT ?`,
+    match,
+    limit,
+  );
+  return rows.map((r) => r.id);
 }

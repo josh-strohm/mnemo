@@ -3,6 +3,7 @@ import {
   listGlobalAndProject,
   touchLastAccessedAt,
   setEmbedding,
+  searchFtsIds,
   type MemoryWithTags,
 } from "@/lib/memories";
 import { scoreMemoryAgainstQuery, tokenizeQuery } from "@/lib/scoring";
@@ -51,6 +52,24 @@ export async function hybridSearch(
   } else {
     const all = await listGlobalAndProject(projectId);
     memories = includeExpired ? all : all.filter((m) => !isExpired(m.expiresAt, now_));
+  }
+
+  // Narrow candidates via FTS5 MATCH when the query has usable tokens. This
+  // replaces the exhaustive in-memory scan and scales the search path beyond
+  // a few thousand memories. Falls back to the full set when FTS yields
+  // nothing (e.g. punctuation-only or no-token query) so recall is preserved.
+  try {
+    const ftsIds = await searchFtsIds(q, {
+      includeDeleted: false,
+      limit: 500,
+    });
+    if (ftsIds && ftsIds.length > 0) {
+      const idSet = new Set(ftsIds);
+      memories = memories.filter((m) => idSet.has(m.id));
+    }
+  } catch (err) {
+    // FTS unavailable / not yet migrated — degrade to the full-scan path.
+    console.error("[search] FTS narrowing failed:", err);
   }
 
   const tokens = tokenizeQuery(q);
