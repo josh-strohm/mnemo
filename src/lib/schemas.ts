@@ -238,6 +238,21 @@ export const memoryApiUpdateSchema = z.object({
 });
 export type MemoryApiUpdateInput = z.infer<typeof memoryApiUpdateSchema>;
 
+// Batch --------------------------------------------------------------------
+
+export const batchCreateSchema = z.object({
+  memories: z.array(memoryApiCreateSchema).min(1).max(50),
+  allowDuplicate: z.boolean().optional(),
+  createMissingProjects: z.boolean().optional(),
+});
+export type BatchCreateInput = z.infer<typeof batchCreateSchema>;
+
+export const batchDeleteSchema = z.object({
+  ids: z.array(z.string().trim().min(1)).min(1).max(100),
+  hard: z.boolean().optional(),
+});
+export type BatchDeleteInput = z.infer<typeof batchDeleteSchema>;
+
 // Search query -------------------------------------------------------------
 
 export const searchQuerySchema = z.object({

@@ -9,15 +9,28 @@ import type { MemoryWithTags } from "@/lib/memories";
 
 export type ExportPriority = "importance" | "recent" | "query";
 
+export type ExportFormat = "markdown" | "json" | "hermes-txt";
+
 export type CompileExportOptions = {
   maxChars?: number;
   query?: string;
   includeExpired?: boolean;
   priority?: ExportPriority;
+  format?: ExportFormat;
 };
 
 export type CompileExportResult = {
+  format: ExportFormat;
+  /** markdown body wrapped in <!-- BEGIN:mnemo --> markers. */
   markdown: string;
+  /** compact one-line-per-memory transcript for agent ingestion. */
+  hermesTxt: string;
+  /** serialised memories array as a JSON string (no enclosing wrapper). */
+  json: string;
+  /** body for the requested `format` — convenience for API routes. */
+  body: string;
+  /** MIME type for the requested `format`. */
+  contentType: string;
   includedCount: number;
   totalCount: number;
   chars: number;
@@ -73,6 +86,65 @@ function renderItem(m: MemoryWithTags): string {
   if (m.importance !== 0.5) meta.push(`importance: ${m.importance.toFixed(2)}`);
   const metaStr = ` (${meta.join("; ")})`;
   return `- **${m.title}**${metaStr} — ${m.content}${tagSuffix}`;
+}
+
+/**
+ * Compact one-line-per-memory transcript for Hermes-style agents. Fields are
+ * pipe-separated; tags are joined with spaces (tags are constrained to
+ * `[a-z0-9-]+` so they can't contain pipes or newlines). Newlines within
+ * title/content are replaced with spaces so each memory stays on one line.
+ */
+function renderHermesLine(m: MemoryWithTags): string {
+  const esc = (s: string) => s.replace(/[\r\n|]+/g, " ");
+  const tagsStr = m.tags.map((t) => `#${t}`).join(" ");
+  const importance = m.importance.toFixed(2);
+  const updated = m.updatedAt.toISOString();
+  return [
+    m.type,
+    esc(m.title),
+    esc(m.content),
+    tagsStr,
+    `imp=${importance}`,
+    `updated=${updated}`,
+  ]
+    .filter((part) => part !== "")
+    .join(" | ");
+}
+
+type SerializableMemory = {
+  id: string;
+  type: string;
+  title: string;
+  content: string;
+  tags: string[];
+  importance: number;
+  source: string | null;
+  project: { id: string; slug: string; name: string } | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string | null;
+  relatedIds: string[];
+  deletedAt: string | null;
+};
+
+function toSerializable(m: MemoryWithTags): SerializableMemory {
+  return {
+    id: m.id,
+    type: m.type,
+    title: m.title,
+    content: m.content,
+    tags: m.tags,
+    importance: m.importance,
+    source: m.source,
+    project: m.project
+      ? { id: m.project.id, slug: m.project.slug, name: m.project.name }
+      : null,
+    createdAt: m.createdAt.toISOString(),
+    updatedAt: m.updatedAt.toISOString(),
+    expiresAt: m.expiresAt ? m.expiresAt.toISOString() : null,
+    relatedIds: m.relatedIds,
+    deletedAt: m.deletedAt ? m.deletedAt.toISOString() : null,
+  };
 }
 
 export async function compileExport(
@@ -145,15 +217,44 @@ export async function compileExport(
       ? "<!-- BEGIN:mnemo -->\n<!-- END:mnemo -->"
       : `<!-- BEGIN:mnemo -->\n${body}\n<!-- END:mnemo -->`;
 
+  const hermesLines = included.map(renderHermesLine);
+  const hermesTxt = hermesLines.join("\n");
+
+  const json = JSON.stringify(
+    {
+      schema: "mnemo.memories.v1",
+      generatedAt: new Date().toISOString(),
+      count: included.length,
+      memories: included.map(toSerializable),
+    },
+    null,
+    2,
+  );
+
+  const format: ExportFormat = opts.format ?? "markdown";
+  const formatBody =
+    format === "json" ? json : format === "hermes-txt" ? hermesTxt : markdown;
+  const contentType =
+    format === "json"
+      ? "application/json; charset=utf-8"
+      : format === "hermes-txt"
+        ? "text/plain; charset=utf-8"
+        : "text/markdown; charset=utf-8";
+
   // Track access for recency signals (fire-and-forget).
   if (included.length > 0) {
     void touchLastAccessedAt(included.map((m) => m.id));
   }
 
   return {
+    format,
     markdown,
+    hermesTxt,
+    json,
+    body: formatBody,
+    contentType,
     includedCount: included.length,
     totalCount: total,
-    chars: markdown.length,
+    chars: formatBody.length,
   };
 }

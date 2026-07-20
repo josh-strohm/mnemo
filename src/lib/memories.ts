@@ -10,6 +10,12 @@ import {
   type MemoryFilters,
 } from "@/lib/schemas";
 
+export type MemoryProjectRef = {
+  id: string;
+  slug: string;
+  name: string;
+};
+
 export type MemoryWithTags = {
   id: string;
   type: string;
@@ -29,6 +35,7 @@ export type MemoryWithTags = {
   embedding: string | null;
   createdAt: Date;
   updatedAt: Date;
+  project?: MemoryProjectRef | null;
 };
 
 type MemoryRow = {
@@ -50,6 +57,7 @@ type MemoryRow = {
   embedding: string | null;
   createdAt: Date;
   updatedAt: Date;
+  project?: MemoryProjectRef | null;
 };
 
 function withTags(m: MemoryRow): MemoryWithTags {
@@ -72,6 +80,7 @@ function withTags(m: MemoryRow): MemoryWithTags {
     embedding: m.embedding,
     createdAt: m.createdAt,
     updatedAt: m.updatedAt,
+    project: m.project ?? null,
   };
 }
 
