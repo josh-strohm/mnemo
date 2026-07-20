@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { updateProjectAction } from "@/app/actions";
 import type { Project } from "@/generated/prisma/client";
+import { ProjectFields } from "@/app/projects/ProjectFields";
 
 export function ProjectEditForm({ project }: { project: Project }) {
   const [state, action, pending] = useActionState<
@@ -14,29 +15,17 @@ export function ProjectEditForm({ project }: { project: Project }) {
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="id" value={project.id} />
 
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Name</span>
-        <input
-          type="text"
-          name="name"
-          defaultValue={project.name}
-          required
-          maxLength={100}
-          className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm"
-        />
-      </label>
-
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Slug</span>
-        <input
-          type="text"
-          name="slug"
-          defaultValue={project.slug}
-          required
-          maxLength={100}
-          className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm"
-        />
-      </label>
+      <ProjectFields
+        defaultValues={{
+          name: project.name,
+          slug: project.slug,
+          description: project.description,
+          color: project.color,
+          icon: project.icon,
+          defaultImportance: project.defaultImportance,
+          isArchived: project.isArchived,
+        }}
+      />
 
       <p className="text-xs text-amber-600 dark:text-amber-400">
         Caution: external agents reference this project by its slug

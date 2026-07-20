@@ -41,9 +41,22 @@ export default async function ProjectsPage() {
               <div className="flex items-center justify-between">
                 <Link
                   href={`/projects/${p.id}`}
-                  className="font-medium hover:underline"
+                  className="inline-flex items-center gap-2 font-medium hover:underline"
                 >
+                  {p.color && (
+                    <span
+                      aria-hidden
+                      className="inline-block w-3 h-3 rounded-full border border-zinc-300 dark:border-zinc-700"
+                      style={{ backgroundColor: p.color }}
+                    />
+                  )}
+                  {p.icon && <span aria-hidden>{p.icon}</span>}
                   {p.name}
+                  {p.isArchived && (
+                    <span className="text-xs font-normal uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                      archived
+                    </span>
+                  )}
                 </Link>
                 <span className="text-xs text-zinc-500">
                   {counts.get(p.id) ?? 0} memories · /{p.slug}

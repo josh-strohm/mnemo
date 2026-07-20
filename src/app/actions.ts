@@ -33,6 +33,24 @@ function requireString(formData: FormData, key: string): string {
   return value;
 }
 
+/** Read a form field as a string, returning undefined when empty/missing. */
+function optionalString(formData: FormData, key: string): string | undefined {
+  const value = formData.get(key);
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}
+
+/** Read a numeric form field; undefined when blank/malformed. */
+function optionalNumber(formData: FormData, key: string): number | undefined {
+  const value = formData.get(key);
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export async function createMemoryAction(formData: FormData) {
   const projectIdRaw = formData.get("projectId");
   const projectId =
@@ -132,6 +150,11 @@ export async function createProjectAction(formData: FormData) {
   const input = projectCreateSchema.parse({
     name: requireString(formData, "name"),
     slug: requireString(formData, "slug"),
+    description: optionalString(formData, "description"),
+    color: optionalString(formData, "color"),
+    icon: optionalString(formData, "icon"),
+    defaultImportance: optionalNumber(formData, "defaultImportance"),
+    isArchived: formData.get("isArchived") === "yes",
   });
 
   const project = await createProject(input);
@@ -159,12 +182,25 @@ export async function updateProjectAction(
 ): Promise<{ error?: string }> {
   const input = projectUpdateSchema.parse({
     id: requireString(formData, "id"),
-    name: requireString(formData, "name"),
-    slug: requireString(formData, "slug"),
+    name: optionalString(formData, "name"),
+    slug: optionalString(formData, "slug"),
+    description: optionalString(formData, "description"),
+    color: optionalString(formData, "color"),
+    icon: optionalString(formData, "icon"),
+    defaultImportance: optionalNumber(formData, "defaultImportance"),
+    isArchived: formData.get("isArchived") === "yes",
   });
 
   try {
-    await updateProject(input.id, { name: input.name, slug: input.slug });
+    await updateProject(input.id, {
+      name: input.name,
+      slug: input.slug,
+      description: input.description ?? null,
+      color: input.color ?? null,
+      icon: input.icon ?? null,
+      defaultImportance: input.defaultImportance,
+      isArchived: input.isArchived,
+    });
   } catch (err) {
     if (err instanceof ProjectSlugTakenError) {
       return { error: err.message };

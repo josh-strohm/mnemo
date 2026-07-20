@@ -95,6 +95,7 @@ export async function POST(request: Request) {
   }
 
   let projectId: string | null = null;
+  let projectDefaultImportance: number | null = null;
   if (parsed.projectSlug) {
     const slug = normalizeSlug(parsed.projectSlug);
     if (slug.length === 0) {
@@ -108,6 +109,7 @@ export async function POST(request: Request) {
       project = await createProject({ name: slug, slug });
     }
     projectId = project.id;
+    projectDefaultImportance = project.defaultImportance;
   }
 
   // Duplicate detection (overridable via header or body field).
@@ -132,13 +134,20 @@ export async function POST(request: Request) {
     }
   }
 
+  // Default-importance fallback: when the caller omits importance, use the
+  // project's configured default (or 0.5 for global) so project-scoped
+  // memories get a sensible baseline without an explicit per-call value.
+  const importance =
+    parsed.importance ??
+    (projectDefaultImportance !== null ? projectDefaultImportance : undefined);
+
   const input: MemoryCreateInput = {
     type: parsed.type,
     title: parsed.title,
     content: parsed.content,
     tags: parsed.tags,
     projectId,
-    importance: parsed.importance,
+    importance,
     expiresAt: parsed.expiresAt,
     source: parsed.source,
   };

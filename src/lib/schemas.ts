@@ -150,6 +150,28 @@ export type MemoryUpdateInput = z.infer<typeof memoryUpdateSchema>;
 
 // Project schemas ---------------------------------------------------------
 
+const projectDescriptionSchema = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .nullable();
+const colorSchema = z
+  .string()
+  .trim()
+  .max(20)
+  .regex(/^#?[0-9a-fA-F]{6}$/, "color must be a 6-digit hex, optional '#'")
+  .optional()
+  .nullable();
+const iconSchema = z
+  .string()
+  .trim()
+  .max(50)
+  .optional()
+  .nullable();
+const defaultImportanceSchema = z.number().min(0).max(1).default(0.5);
+const isArchivedSchema = z.boolean().optional();
+
 export const projectCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
   slug: z
@@ -158,18 +180,30 @@ export const projectCreateSchema = z.object({
     .min(1)
     .max(100)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "slug must be kebab-case"),
+  description: projectDescriptionSchema,
+  color: colorSchema,
+  icon: iconSchema,
+  defaultImportance: defaultImportanceSchema.optional(),
+  isArchived: isArchivedSchema,
 });
 export type ProjectCreateInput = z.infer<typeof projectCreateSchema>;
 
 export const projectUpdateSchema = z.object({
   id: z.string().min(1),
-  name: z.string().trim().min(1).max(100),
+  name: z.string().trim().min(1).max(100).optional(),
   slug: z
     .string()
     .trim()
     .min(1)
     .max(100)
-    .transform((s) => normalizeSlug(s)),
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "slug must be kebab-case")
+    .optional()
+    .transform((s) => (s === undefined ? s : normalizeSlug(s))),
+  description: projectDescriptionSchema,
+  color: colorSchema,
+  icon: iconSchema,
+  defaultImportance: defaultImportanceSchema.optional(),
+  isArchived: isArchivedSchema,
 });
 export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>;
 
