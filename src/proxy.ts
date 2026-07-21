@@ -93,7 +93,12 @@ export async function proxy(request: NextRequest) {
     });
   }
 
-  // Tier 3: rate limiting on every request (UI + API).
+  // Tier 3: rate limit only API traffic. UI pages, prefetches, RSC roundtrips
+  // and asset loads aren't rate-limited (those would burn through the budget
+  // during normal navigation and break the app).
+  if (!pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
   if (Math.random() < 0.05) gcRateLimitStore();
   const rlKey = rateLimitKeyFor(request);
   const rl = checkRateLimit(rlKey);

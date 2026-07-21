@@ -259,7 +259,7 @@ per-agent API keys, and HMAC-signed webhook delivery on mutations.
 
 #### Tier 3 — Rate limiting
 
-- Every request (UI and API) is checked against a per-IP sliding window: default **100 req/min** (`RATE_LIMIT_RPM` env to override). 429 with `Retry-After` on overflow.
+- Only `/api/*` requests are checked against a per-IP sliding window: default **100 req/min** (`RATE_LIMIT_RPM` env to override). UI navigation, RSC roundtrips, prefetches, and asset loads are not counted. 429 with `Retry-After` on overflow.
 - The window is **in-memory per Netlify instance** — sufficient for spam mitigation, not for global limiting. For multi-region strong limiting, front Mnemo with Cloudflare or use Upstash Redis.
 
 #### Tier 3 — Per-project export defaults
