@@ -11,6 +11,8 @@ import {
   normalizeSlug,
   type MemoryCreateInput,
 } from "@/lib/schemas";
+import { logAudit, auditRequestInfo } from "@/lib/audit";
+import { triggerWebhook } from "@/lib/webhooks";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -160,6 +162,21 @@ export async function POST(request: Request) {
     created.title,
     created.content,
   );
+
+  // Tier 3: audit + webhook.
+  const { actorIp, userAgent } = auditRequestInfo(request);
+  void logAudit("create", {
+    memoryId: created.id,
+    projectId: created.projectId,
+    actorIp,
+    userAgent,
+    metadata: { type: created.type, importance: created.importance },
+  });
+  void triggerWebhook("memory.created", {
+    id: created.id,
+    type: created.type,
+    projectId: created.projectId,
+  });
 
   return Response.json(created, { status: 201 });
 }

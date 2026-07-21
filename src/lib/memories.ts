@@ -28,11 +28,14 @@ export type MemoryWithTags = {
   lastAccessedAt: Date | null;
   source: string | null;
   sourceSessionId: string | null;
+  sourceMessageId: string | null;
   createdBy: string | null;
   sourceUrl: string | null;
   relatedIds: string[];
   deletedAt: Date | null;
   embedding: string | null;
+  embeddingModel: string | null;
+  isPinned: boolean;
   createdAt: Date;
   updatedAt: Date;
   project?: MemoryProjectRef | null;
@@ -50,11 +53,14 @@ type MemoryRow = {
   lastAccessedAt: Date | null;
   source: string | null;
   sourceSessionId: string | null;
+  sourceMessageId: string | null;
   createdBy: string | null;
   sourceUrl: string | null;
   relatedIds: string;
   deletedAt: Date | null;
   embedding: string | null;
+  embeddingModel: string | null;
+  isPinned: boolean;
   createdAt: Date;
   updatedAt: Date;
   project?: MemoryProjectRef | null;
@@ -73,11 +79,14 @@ function withTags(m: MemoryRow): MemoryWithTags {
     lastAccessedAt: m.lastAccessedAt,
     source: m.source,
     sourceSessionId: m.sourceSessionId,
+    sourceMessageId: (m as unknown as { sourceMessageId?: string | null }).sourceMessageId ?? null,
     createdBy: m.createdBy,
     sourceUrl: m.sourceUrl,
     relatedIds: parseRelatedIds(m.relatedIds),
     deletedAt: m.deletedAt,
     embedding: m.embedding,
+    embeddingModel: m.embeddingModel ?? null,
+    isPinned: Boolean((m as unknown as { isPinned?: boolean | number }).isPinned),
     createdAt: m.createdAt,
     updatedAt: m.updatedAt,
     project: m.project ?? null,
@@ -118,6 +127,17 @@ function baseWhere(
   if (filters.includeDeleted !== true) {
     where.deletedAt = null;
   }
+  // Tier 3: session linkage
+  if (filters.sourceSessionId) where.sourceSessionId = filters.sourceSessionId;
+  // Tier 3: sourceMessageId
+  if (filters.sourceMessageId) {
+    (where as Record<string, unknown>).sourceMessageId = filters.sourceMessageId;
+  }
+  // Tier 3: pinned filter
+  if (filters.isPinned === true) where.isPinned = true;
+  else if (filters.isPinned === false) where.isPinned = false;
+  // sessionId alias (maps to sourceSessionId)
+  if (filters.sessionId) where.sourceSessionId = filters.sessionId;
   return where;
 }
 
@@ -148,6 +168,12 @@ export async function listMemories(
     limit: rawFilters.limit ?? DEFAULT_PAGE_SIZE,
     offset: rawFilters.offset ?? 0,
     sort: rawFilters.sort ?? "newest",
+    // Tier 3
+    sessionId: rawFilters.sessionId,
+    isPinned: rawFilters.isPinned,
+    includeExpired: rawFilters.includeExpired ?? false,
+    sourceSessionId: rawFilters.sourceSessionId,
+    sourceMessageId: rawFilters.sourceMessageId,
   };
   const where = baseWhere(filters);
   const now = new Date();
@@ -318,6 +344,9 @@ export async function createMemory(
       importance: input.importance ?? 0.5,
       expiresAt: input.expiresAt ?? null,
       source: input.source ?? null,
+      isPinned: input.isPinned ?? false,
+      sourceSessionId: input.sourceSessionId ?? null,
+      sourceUrl: input.sourceUrl ?? null,
     },
   });
   return withTags(created);
@@ -345,6 +374,9 @@ export async function updateMemory(
       importance: input.importance ?? 0.5,
       expiresAt: input.expiresAt ?? null,
       source: input.source ?? null,
+      isPinned: input.isPinned ?? undefined,
+      sourceSessionId: input.sourceSessionId ?? undefined,
+      sourceUrl: input.sourceUrl ?? undefined,
     },
   });
   return withTags(updated);
@@ -361,9 +393,12 @@ export type MemoryUpdatePatch = {
   expiresAt?: Date | null;
   source?: string | null;
   sourceSessionId?: string | null;
+  sourceMessageId?: string | null;
   createdBy?: string | null;
   sourceUrl?: string | null;
   relatedIds?: string[];
+  isPinned?: boolean;
+  embeddingModel?: string | null;
 };
 
 export async function updateMemoryPartial(
@@ -388,6 +423,11 @@ export async function updateMemoryPartial(
   if (input.importance !== undefined) data.importance = input.importance;
   if (input.expiresAt !== undefined) data.expiresAt = input.expiresAt;
   if (input.source !== undefined) data.source = input.source;
+  if (input.sourceSessionId !== undefined) data.sourceSessionId = input.sourceSessionId;
+  if (input.sourceMessageId !== undefined) data.sourceMessageId = input.sourceMessageId;
+  if (input.sourceUrl !== undefined) data.sourceUrl = input.sourceUrl;
+  if (input.isPinned !== undefined) data.isPinned = input.isPinned;
+  if (input.embeddingModel !== undefined) data.embeddingModel = input.embeddingModel;
   // projectId handled by caller (resolved from projectSlug/projectId/existing)
   data.projectId = resolvedProjectId;
 

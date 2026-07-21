@@ -8,6 +8,8 @@ import {
 import { getProjectBySlug, createProject } from "@/lib/projects";
 import { backfillEmbeddingForMemory } from "@/lib/search";
 import { memoryApiUpdateSchema, normalizeSlug } from "@/lib/schemas";
+import { logAudit, auditRequestInfo } from "@/lib/audit";
+import { triggerWebhook } from "@/lib/webhooks";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -98,6 +100,27 @@ export async function PUT(
     }
     // Re-generate embedding if text may have changed.
     void backfillEmbeddingForMemory(updated.id, updated.title, updated.content);
+
+    // Tier 3: audit + webhook.
+    const { actorIp, userAgent } = auditRequestInfo(request);
+    void logAudit("update", {
+      memoryId: updated.id,
+      projectId: updated.projectId,
+      actorIp,
+      userAgent,
+      metadata: { fields: Object.keys(parsed).filter((k) => k !== "allowDuplicate") },
+    });
+    void triggerWebhook("memory.updated", {
+      id: updated.id,
+      type: updated.type,
+      projectId: updated.projectId,
+      pinnedChanged:
+        parsed.isPinned !== undefined
+          ? Boolean(parsed.isPinned) !==
+            Boolean((existing as unknown as { isPinned?: boolean }).isPinned)
+          : false,
+    });
+
     return Response.json(updated);
   } catch (err) {
     if (
@@ -122,6 +145,18 @@ export async function DELETE(
     if (!result) {
       return Response.json({ error: "Not found" }, { status: 404 });
     }
+    // Tier 3: audit + webhook.
+    const { actorIp, userAgent } = auditRequestInfo(request);
+    void logAudit(hard ? "delete" : "soft_delete", {
+      memoryId: id,
+      actorIp,
+      userAgent,
+      metadata: { hard },
+    });
+    void triggerWebhook(hard ? "memory.deleted" : "memory.soft_deleted", {
+      id,
+      hard,
+    });
     return Response.json(result);
   } catch (err) {
     if (

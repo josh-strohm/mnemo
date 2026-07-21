@@ -170,19 +170,26 @@ export async function compileExport(
   const total = memories.length;
   const sorted = sortMemories(memories, priority, opts.query);
 
+  // Tier 3: pinned memories always survive the char budget.
+  const pinned = sorted.filter((m) => m.isPinned);
+  const rest = sorted.filter((m) => !m.isPinned);
+
   // Apply the character budget (naive estimate: rendered item length + newline).
-  // Highest-priority memories are kept first; the rest are omitted.
-  let included = sorted;
+  // Highest-priority memories are kept first; pinned always included even if budget exceeded.
+  let included: MemoryWithTags[];
   if (opts.maxChars && opts.maxChars > 0) {
-    const kept: MemoryWithTags[] = [];
-    let acc = 0;
-    for (const m of sorted) {
+    const kept: MemoryWithTags[] = [...pinned];
+    let acc = pinned.reduce((a, m) => a + renderItem(m).length + 1, 0);
+    for (const m of rest) {
       const est = renderItem(m).length + 1;
-      if (kept.length > 0 && acc + est > opts.maxChars) break;
+      if (kept.length > pinned.length && acc + est > opts.maxChars) break;
       acc += est;
       kept.push(m);
     }
     included = kept;
+  } else {
+    // No budget: pinned first then the rest in sorted order.
+    included = [...pinned, ...rest];
   }
 
   // Group by type, preserving the priority order within each group.

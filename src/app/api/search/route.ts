@@ -2,6 +2,7 @@ import { ZodError } from "zod";
 import { hybridSearch } from "@/lib/search";
 import { getProjectBySlug } from "@/lib/projects";
 import { searchQuerySchema } from "@/lib/schemas";
+import { logAudit, auditRequestInfo } from "@/lib/audit";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -46,6 +47,15 @@ export async function GET(request: Request) {
     projectId,
     k: query.k,
     includeExpired: query.includeExpired,
+  });
+
+  // Tier 3: audit (fire-and-forget)
+  const { actorIp, userAgent } = auditRequestInfo(request);
+  void logAudit("search", {
+    projectId: projectId ?? null,
+    actorIp,
+    userAgent,
+    metadata: { q: query.q, k: query.k, hits: hits.length },
   });
 
   return Response.json(

@@ -31,6 +31,9 @@ export async function createProject(input: {
   icon?: string | null;
   defaultImportance?: number;
   isArchived?: boolean;
+  exportTemplate?: string | null;
+  maxExportChars?: number | null;
+  includeGlobal?: boolean;
 }): Promise<Project> {
   return prisma.project.create({
     data: {
@@ -41,6 +44,9 @@ export async function createProject(input: {
       icon: input.icon ?? null,
       defaultImportance: input.defaultImportance ?? 0.5,
       isArchived: input.isArchived ?? false,
+      exportTemplate: input.exportTemplate ?? null,
+      maxExportChars: input.maxExportChars ?? null,
+      includeGlobal: input.includeGlobal ?? true,
     },
   });
 }
@@ -55,6 +61,9 @@ export async function updateProject(
     icon?: string | null;
     defaultImportance?: number;
     isArchived?: boolean;
+    exportTemplate?: string | null;
+    maxExportChars?: number | null;
+    includeGlobal?: boolean;
   },
 ): Promise<Project> {
   const current = await prisma.project.findUnique({ where: { id } });
@@ -83,6 +92,9 @@ export async function updateProject(
   if (input.icon !== undefined) data.icon = input.icon ?? null;
   if (input.defaultImportance !== undefined) data.defaultImportance = input.defaultImportance;
   if (input.isArchived !== undefined) data.isArchived = input.isArchived;
+  if (input.exportTemplate !== undefined) data.exportTemplate = typeof input.exportTemplate === "string" && input.exportTemplate.length === 0 ? null : (input.exportTemplate ?? null);
+  if (input.maxExportChars !== undefined) data.maxExportChars = input.maxExportChars ?? null;
+  if (input.includeGlobal !== undefined) data.includeGlobal = input.includeGlobal;
 
   try {
     return await prisma.project.update({ where: { id }, data });

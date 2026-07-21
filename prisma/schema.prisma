@@ -16,6 +16,10 @@ model Project {
   icon             String?
   defaultImportance Float   @default(0.5)
   isArchived       Boolean  @default(false)
+  // Tier 3 — per-project export behaviour
+  exportTemplate   String?  // markdown | hermes-txt | json
+  maxExportChars   Int?
+  includeGlobal    Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   memories         Memory[]
@@ -36,11 +40,14 @@ model Memory {
   lastAccessedAt   DateTime?
   source           String?
   sourceSessionId  String?
+  sourceMessageId  String?
   createdBy        String?
   sourceUrl        String?
   relatedIds       String    @default("[]")
   deletedAt        DateTime?
   embedding        String?
+  embeddingModel   String?
+  isPinned         Boolean   @default(false)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   versions         MemoryVersion[]
@@ -49,6 +56,8 @@ model Memory {
   @@index([type])
   @@index([updatedAt])
   @@index([deletedAt])
+  @@index([isPinned])
+  @@index([sourceSessionId])
 }
 
 model MemoryVersion {
@@ -68,4 +77,36 @@ model MemoryVersion {
   @@unique([memoryId, version])
   @@index([memoryId])
   @@index([memoryId, version])
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  keyHash     String    @unique
+  name        String
+  scopes      String    @default("[]") // JSON string array e.g. ["memory:read","memory:write","project:read"]
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String   // create | update | delete | soft_delete | restore | search | export | batch_create | batch_delete | import | backup
+  memoryId   String?
+  projectId  String?
+  actorIp    String?
+  userAgent  String?
+  apiKeyId   String?
+  metadata   String?  // JSON blob with extra context
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([memoryId])
+  @@index([projectId])
 }

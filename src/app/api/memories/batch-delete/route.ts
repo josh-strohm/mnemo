@@ -1,6 +1,8 @@
 import { ZodError } from "zod";
 import { deleteMemory } from "@/lib/memories";
 import { batchDeleteSchema } from "@/lib/schemas";
+import { logAudit, auditRequestInfo } from "@/lib/audit";
+import { triggerWebhook } from "@/lib/webhooks";
 
 type ItemOk = { id: string; ok: true; soft: boolean };
 type ItemErr = { id: string; ok: false; error: string };
@@ -62,6 +64,22 @@ export async function POST(request: Request) {
   }
 
   const allOk = missingCount === 0;
+
+  // Tier 3: audit + webhook.
+  const { actorIp, userAgent } = auditRequestInfo(request);
+  void logAudit("batch_delete", {
+    actorIp,
+    userAgent,
+    metadata: { softCount, hardCount, missingCount, total: orderedIds.length },
+  });
+  if (softCount + hardCount > 0) {
+    void triggerWebhook("memory.batch_deleted", {
+      soft: softCount,
+      hard: hardCount,
+      missing: missingCount,
+    });
+  }
+
   return Response.json(
     {
       results,

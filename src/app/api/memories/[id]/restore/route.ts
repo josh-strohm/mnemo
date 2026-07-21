@@ -2,6 +2,8 @@ import { ZodError } from "zod";
 import { z } from "zod";
 import { restoreMemory, updateMemoryPartial } from "@/lib/memories";
 import { restoreVersion } from "@/lib/versions";
+import { logAudit, auditRequestInfo } from "@/lib/audit";
+import { triggerWebhook } from "@/lib/webhooks";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -55,6 +57,14 @@ export async function POST(
         { status: 404 },
       );
     }
+    const { actorIp, userAgent } = auditRequestInfo(request);
+    void logAudit("restore", {
+      memoryId: id,
+      actorIp,
+      userAgent,
+      metadata: { kind: "version", version: result.version.version },
+    });
+    void triggerWebhook("memory.restored", { id, kind: "version" });
     return Response.json({
       memory: result.memory,
       restoredFromVersion: result.version,
@@ -68,5 +78,13 @@ export async function POST(
     return Response.json({ error: "Not found" }, { status: 404 });
   }
   // restoreMemory returns the row even if it wasn't deleted; report accurately.
+  const { actorIp: actorIp2, userAgent: userAgent2 } = auditRequestInfo(request);
+  void logAudit("restore", {
+    memoryId: id,
+    actorIp: actorIp2,
+    userAgent: userAgent2,
+    metadata: { kind: "undelete" },
+  });
+  void triggerWebhook("memory.restored", { id, kind: "undelete" });
   return Response.json({ memory: existing, restored: true });
 }

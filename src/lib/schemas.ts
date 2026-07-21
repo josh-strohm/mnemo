@@ -46,8 +46,7 @@ export const csvToTags = z
       .filter((t) => t.length > 0),
   );
 
-export const tagsToDbString = (tags: string[]): string =>
-  JSON.stringify(tags);
+export const tagsToDbString = (tags: string[]): string => JSON.stringify(tags);
 
 export const parseDbTags = (s: string): string[] => {
   if (!s) return [];
@@ -132,6 +131,9 @@ export const memoryCreateSchema = z.object({
   importance: importanceSchema.optional(),
   expiresAt: expiresAtSchema.optional(),
   source: memorySourceSchema.optional(),
+  isPinned: z.boolean().optional(),
+  sourceSessionId: z.string().trim().max(200).optional(),
+  sourceUrl: z.string().trim().max(2000).optional(),
 });
 export type MemoryCreateInput = z.infer<typeof memoryCreateSchema>;
 
@@ -145,6 +147,9 @@ export const memoryUpdateSchema = z.object({
   importance: importanceSchema.optional(),
   expiresAt: expiresAtSchema.optional(),
   source: memorySourceSchema.optional(),
+  isPinned: z.boolean().optional(),
+  sourceSessionId: z.string().trim().max(200).optional(),
+  sourceUrl: z.string().trim().max(2000).optional(),
 });
 export type MemoryUpdateInput = z.infer<typeof memoryUpdateSchema>;
 
@@ -163,14 +168,22 @@ const colorSchema = z
   .regex(/^#?[0-9a-fA-F]{6}$/, "color must be a 6-digit hex, optional '#'")
   .optional()
   .nullable();
-const iconSchema = z
-  .string()
-  .trim()
-  .max(50)
-  .optional()
-  .nullable();
+const iconSchema = z.string().trim().max(50).optional().nullable();
 const defaultImportanceSchema = z.number().min(0).max(1).default(0.5);
 const isArchivedSchema = z.boolean().optional();
+
+const exportTemplateSchema = z
+  .enum(["markdown", "hermes-txt", "json"])
+  .nullable()
+  .optional();
+const maxExportCharsSchema = z
+  .number()
+  .int()
+  .min(0)
+  .max(1_000_000)
+  .nullable()
+  .optional();
+const includeGlobalSchema = z.boolean().optional();
 
 export const projectCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -185,6 +198,9 @@ export const projectCreateSchema = z.object({
   icon: iconSchema,
   defaultImportance: defaultImportanceSchema.optional(),
   isArchived: isArchivedSchema,
+  exportTemplate: exportTemplateSchema,
+  maxExportChars: maxExportCharsSchema,
+  includeGlobal: includeGlobalSchema,
 });
 export type ProjectCreateInput = z.infer<typeof projectCreateSchema>;
 
@@ -204,34 +220,38 @@ export const projectUpdateSchema = z.object({
   icon: iconSchema,
   defaultImportance: defaultImportanceSchema.optional(),
   isArchived: isArchivedSchema,
+  exportTemplate: exportTemplateSchema,
+  maxExportChars: maxExportCharsSchema,
+  includeGlobal: includeGlobalSchema,
 });
 export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>;
 
 // Filters / pagination ----------------------------------------------------
 
-const emptyStringToUndefined = z.preprocess((v) =>
-  v === "" ? undefined : v,
-  z.string().optional(),
-);
+const emptyStringToUndefined = z.preprocess((v) => (v === "" ? undefined : v), z.string().optional());
 
 export const memoryFiltersSchema = z.object({
   q: emptyStringToUndefined,
-  type: z.preprocess(
-    (v) => (v === "" ? undefined : v),
-    memoryTypeSchema.optional(),
-  ),
-  project: emptyStringToUndefined.transform(
-    (v): string | "global" | undefined => {
-      if (v === undefined) return undefined;
-      if (v === "global") return "global" as const;
-      return v;
-    },
-  ),
+  type: z.preprocess((v) => (v === "" ? undefined : v), memoryTypeSchema.optional()),
+  project: emptyStringToUndefined.transform((v): string | "global" | undefined => {
+    if (v === undefined) return undefined;
+    if (v === "global") return "global" as const;
+    return v;
+  }),
   tag: emptyStringToUndefined,
   includeDeleted: optionalBoolean(false),
   limit: optionalInt(1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE),
   offset: optionalInt(0, 1_000_000, 0),
   sort: optionalEnum(SORT_OPTIONS, "newest"),
+  // Tier 3 additions
+  sessionId: emptyStringToUndefined.optional(),
+  isPinned: z.preprocess(
+    (v) => (v === "" || v === undefined ? undefined : v === "true" || v === true),
+    z.boolean().optional(),
+  ),
+  includeExpired: optionalBoolean(false),
+  sourceSessionId: emptyStringToUndefined.optional(),
+  sourceMessageId: emptyStringToUndefined.optional(),
 });
 export type MemoryFilters = {
   q?: string;
@@ -242,6 +262,12 @@ export type MemoryFilters = {
   limit: number;
   offset: number;
   sort: SortOption;
+  // Tier 3
+  sessionId?: string;
+  isPinned?: boolean;
+  includeExpired?: boolean;
+  sourceSessionId?: string;
+  sourceMessageId?: string;
 };
 
 // API create / update ------------------------------------------------------
@@ -256,6 +282,11 @@ export const memoryApiCreateSchema = z.object({
   expiresAt: expiresAtSchema.optional(),
   source: memorySourceSchema.optional(),
   allowDuplicate: z.boolean().optional(),
+  isPinned: z.boolean().optional(),
+  sourceSessionId: z.string().trim().max(200).nullable().optional(),
+  sourceMessageId: z.string().trim().max(200).nullable().optional(),
+  sourceUrl: z.string().trim().max(2000).nullable().optional(),
+  embeddingModel: z.string().trim().max(100).nullable().optional(),
 });
 export type MemoryApiCreateInput = z.infer<typeof memoryApiCreateSchema>;
 
@@ -269,6 +300,11 @@ export const memoryApiUpdateSchema = z.object({
   importance: z.number().min(0).max(1).optional(),
   expiresAt: expiresAtSchema.optional(),
   source: memorySourceSchema.optional(),
+  isPinned: z.boolean().optional(),
+  sourceSessionId: z.string().trim().max(200).nullable().optional(),
+  sourceMessageId: z.string().trim().max(200).nullable().optional(),
+  sourceUrl: z.string().trim().max(2000).nullable().optional(),
+  embeddingModel: z.string().trim().max(100).nullable().optional(),
 });
 export type MemoryApiUpdateInput = z.infer<typeof memoryApiUpdateSchema>;
 
@@ -337,3 +373,108 @@ export function normalizeSlug(slug: string): string {
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
+
+// ---------------------------------------------------------------------------
+// Tier 3 schemas
+// ---------------------------------------------------------------------------
+
+export const contextQuerySchema = z.object({
+  project: z.string().optional(),
+  q: z.string().trim().min(1).optional(),
+  budget: optionalInt(0, 100_000, 3500),
+  alwaysInclude: z.string().optional(), // comma-separated ids
+  includeExpired: optionalBoolean(false),
+  format: z
+    .preprocess((v) => (v === "" || v == null ? "markdown" : v), z.enum(["markdown", "hermes-txt", "json"]).catch("markdown"))
+    .pipe(z.enum(["markdown", "hermes-txt", "json"]))
+    .optional()
+    .default("markdown"),
+  includeGlobal: optionalBoolean(true),
+});
+export type ContextQuery = {
+  project?: string;
+  q?: string;
+  budget: number;
+  alwaysInclude?: string;
+  includeExpired: boolean;
+  format: "markdown" | "hermes-txt" | "json";
+  includeGlobal: boolean;
+};
+
+// Import (BEGIN/END block parser) -------------------------------------------
+
+export const importMnemoSchema = z.object({
+  content: z.string().min(1),
+  projectSlug: projectSlugSchema,
+  allowDuplicate: z.boolean().optional(),
+  source: memorySourceSchema.optional(),
+  createMissingProjects: z.boolean().optional(),
+});
+export type ImportMnemoInput = z.infer<typeof importMnemoSchema>;
+
+export const importHermesSchema = z.object({
+  entries: z
+    .array(
+      z.object({
+        text: z.string().min(1),
+        type: memoryTypeSchema.optional(),
+        title: z.string().max(300).optional(),
+        tags: z.array(z.string()).max(20).optional(),
+        projectSlug: z.string().max(100).optional(),
+      }),
+    )
+    .min(1)
+    .max(100),
+  allowDuplicate: z.boolean().optional(),
+  projectSlug: projectSlugSchema,
+});
+export type ImportHermesInput = z.infer<typeof importHermesSchema>;
+
+// API keys ------------------------------------------------------------------
+
+export const apiKeyCreateSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  scopes: z.array(z.string().trim().min(1)).min(1).max(20).default(["memory:read"]),
+  expiresAt: expiresAtSchema.optional(),
+});
+export type ApiKeyCreateInput = z.infer<typeof apiKeyCreateSchema>;
+
+// Audit filters -------------------------------------------------------------
+
+export const auditFiltersSchema = z.object({
+  action: emptyStringToUndefined.optional(),
+  memoryId: emptyStringToUndefined.optional(),
+  projectId: emptyStringToUndefined.optional(),
+  limit: optionalInt(1, 200, 50),
+  offset: optionalInt(0, 1_000_000, 0),
+});
+export type AuditFilters = {
+  action?: string;
+  memoryId?: string;
+  projectId?: string;
+  limit: number;
+  offset: number;
+};
+
+// Expiring ------------------------------------------------------------------
+
+export const expiringQuerySchema = z.object({
+  days: optionalInt(0, 365, 7),
+  project: z.string().optional(),
+});
+export type ExpiringQuery = {
+  days: number;
+  project?: string;
+};
+
+// Rerank toggle -------------------------------------------------------------
+
+export const RERANK_ENABLED = (): boolean =>
+  process.env.RERANK_ENABLED === "true" || Boolean(process.env.COHERE_API_KEY);
+
+// Backup/restore ------------------------------------------------------------
+
+export const backupRestoreSchema = z.object({
+  data: z.record(z.string(), z.unknown()),
+});
+export type BackupRestoreInput = z.infer<typeof backupRestoreSchema>;

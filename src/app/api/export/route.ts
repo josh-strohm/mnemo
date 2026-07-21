@@ -2,6 +2,7 @@ import { ZodError, z } from "zod";
 import { compileExport, type ExportFormat } from "@/lib/export";
 import { getProjectBySlug } from "@/lib/projects";
 import { exportQuerySchema } from "@/lib/schemas";
+import { logAudit, auditRequestInfo } from "@/lib/audit";
 
 const formatSchema = z
   .enum(["markdown", "json", "hermes-txt"])
@@ -55,6 +56,22 @@ export async function GET(request: Request) {
     query: query.q,
     includeExpired: query.includeExpired,
     format,
+  });
+
+  // Tier 3: audit (fire-and-forget)
+  const { actorIp, userAgent } = auditRequestInfo(request);
+  void logAudit("export", {
+    projectId: typeof selection === "string" ? selection : null,
+    actorIp,
+    userAgent,
+    metadata: {
+      format,
+      chars: result.chars,
+      includedCount: result.includedCount,
+      totalCount: result.totalCount,
+      priority: query.priority,
+      hasQuery: Boolean(query.q),
+    },
   });
 
   const tokens = Math.max(0, Math.round(result.chars / 4));

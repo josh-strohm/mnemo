@@ -8,6 +8,8 @@ import {
   type MemoryApiCreateInput,
   type MemoryCreateInput,
 } from "@/lib/schemas";
+import { logAudit, auditRequestInfo } from "@/lib/audit";
+import { triggerWebhook } from "@/lib/webhooks";
 
 type BatchItemResult = {
   index: number;
@@ -56,6 +58,7 @@ export async function POST(request: Request) {
   let duplicateCount = 0;
   let errorCount = 0;
 
+  let lastProjectId: string | null = null;
   for (let i = 0; i < parsed.memories.length; i++) {
     const entry: MemoryApiCreateInput = parsed.memories[i];
     try {
@@ -88,6 +91,7 @@ export async function POST(request: Request) {
         }
         projectId = project.id;
       }
+      lastProjectId = projectId ?? lastProjectId;
 
       if (!allowDuplicate && entry.allowDuplicate !== true) {
         const dup = await findPossibleDuplicates({
@@ -131,6 +135,24 @@ export async function POST(request: Request) {
 
   const allOk = errorCount === 0 && duplicateCount === 0;
   const status = allOk ? 200 : 207;
+
+  // Tier 3: audit + webhook.
+  const { actorIp, userAgent } = auditRequestInfo(request);
+  // Track the most-recent project for the batch — fall back to null.
+  void logAudit("batch_create", {
+    projectId: lastProjectId,
+    actorIp,
+    userAgent,
+    metadata: { createdCount, duplicateCount, errorCount, total: parsed.memories.length },
+  });
+  if (createdCount > 0) {
+    void triggerWebhook("memory.batch_created", {
+      created: createdCount,
+      duplicates: duplicateCount,
+      errors: errorCount,
+    });
+  }
+
   return Response.json(
     {
       created: createdCount,
