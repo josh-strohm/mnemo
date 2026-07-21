@@ -53,6 +53,7 @@ export default function RootLayout({
             <NavLink href="/projects">Projects</NavLink>
             <NavLink href="/trash">Trash</NavLink>
             <NavLink href="/export">Export</NavLink>
+            <NavLink href="/admin">Admin</NavLink>
             <div className="ml-auto">
               <LogoutButton />
             </div>

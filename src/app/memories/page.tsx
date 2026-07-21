@@ -121,13 +121,19 @@ export default async function MemoriesPage({
             return (
               <li
                 key={m.id}
-                className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-4"
+                className={
+                  "rounded-lg border p-4 " +
+                  (m.isPinned
+                    ? "border-amber-400 dark:border-amber-600 bg-amber-50/40 dark:bg-amber-950/20"
+                    : "border-zinc-200 dark:border-zinc-800")
+                }
               >
                 <div className="flex items-center justify-between gap-2">
                   <Link
                     href={`/memories/${m.id}`}
-                    className="font-medium hover:underline"
+                    className="font-medium hover:underline inline-flex items-center gap-2"
                   >
+                    {m.isPinned && <span aria-hidden title="pinned">📌</span>}
                     {m.title}
                   </Link>
                   <span className="text-xs text-zinc-500">
@@ -142,6 +148,14 @@ export default async function MemoriesPage({
                   {sourceLabel && (
                     <span className="text-xs rounded border border-zinc-300 dark:border-zinc-700 text-zinc-500 px-2 py-0.5">
                       {sourceLabel}
+                    </span>
+                  )}
+                  {m.importance !== 0.5 && (
+                    <span
+                      className="text-xs rounded border border-zinc-300 dark:border-zinc-700 text-zinc-500 px-2 py-0.5"
+                      title="importance"
+                    >
+                      imp {m.importance.toFixed(2)}
                     </span>
                   )}
                   {m.tags.map((t) => (

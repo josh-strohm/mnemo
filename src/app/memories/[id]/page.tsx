@@ -41,7 +41,10 @@ export default async function MemoryDetailPage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{memory.title}</h1>
+        <h1 className="text-2xl font-semibold inline-flex items-center gap-2">
+          {memory.isPinned && <span aria-hidden title="pinned">📌</span>}
+          {memory.title}
+        </h1>
         <Link
           href="/memories"
           className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"

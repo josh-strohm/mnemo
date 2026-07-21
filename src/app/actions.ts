@@ -64,6 +64,12 @@ export async function createMemoryAction(formData: FormData) {
     content: requireString(formData, "content"),
     tags: requireString(formData, "tags"),
     projectId,
+    importance: optionalNumber(formData, "importance"),
+    expiresAt: optionalString(formData, "expiresAt"),
+    source: optionalString(formData, "source"),
+    isPinned: formData.get("isPinned") === "yes" || formData.get("isPinned") === "true",
+    sourceSessionId: optionalString(formData, "sourceSessionId"),
+    sourceUrl: optionalString(formData, "sourceUrl"),
   });
 
   await createMemory(input);
@@ -85,6 +91,12 @@ export async function updateMemoryAction(formData: FormData) {
     content: requireString(formData, "content"),
     tags: requireString(formData, "tags"),
     projectId,
+    importance: optionalNumber(formData, "importance"),
+    expiresAt: optionalString(formData, "expiresAt"),
+    source: optionalString(formData, "source"),
+    isPinned: formData.get("isPinned") === "yes" || formData.get("isPinned") === "true",
+    sourceSessionId: optionalString(formData, "sourceSessionId"),
+    sourceUrl: optionalString(formData, "sourceUrl"),
   });
 
   await updateMemory(input);
@@ -147,6 +159,22 @@ export async function unlinkMemoryAction(formData: FormData) {
 }
 
 export async function createProjectAction(formData: FormData) {
+  const exportTemplateRaw = formData.get("exportTemplate");
+  const exportTemplate =
+    typeof exportTemplateRaw === "string" && exportTemplateRaw.length > 0
+      ? exportTemplateRaw
+      : null;
+  const maxExportCharsRaw = formData.get("maxExportChars");
+  const maxExportChars =
+    typeof maxExportCharsRaw === "string" && maxExportCharsRaw.length > 0
+      ? Number(maxExportCharsRaw)
+      : null;
+  const includeGlobal =
+    formData.get("includeGlobal") === null
+      ? true
+      : formData.get("includeGlobal") === "yes" ||
+        formData.get("includeGlobal") === "true";
+
   const input = projectCreateSchema.parse({
     name: requireString(formData, "name"),
     slug: requireString(formData, "slug"),
@@ -155,6 +183,12 @@ export async function createProjectAction(formData: FormData) {
     icon: optionalString(formData, "icon"),
     defaultImportance: optionalNumber(formData, "defaultImportance"),
     isArchived: formData.get("isArchived") === "yes",
+    exportTemplate,
+    maxExportChars:
+      typeof maxExportChars === "number" && Number.isFinite(maxExportChars)
+        ? maxExportChars
+        : null,
+    includeGlobal,
   });
 
   const project = await createProject(input);
@@ -180,6 +214,20 @@ export async function updateProjectAction(
   _prev: { error?: string } | undefined,
   formData: FormData,
 ): Promise<{ error?: string }> {
+  const exportTemplateRaw = formData.get("exportTemplate");
+  const exportTemplate =
+    typeof exportTemplateRaw === "string" && exportTemplateRaw.length > 0
+      ? exportTemplateRaw
+      : null;
+  const maxExportCharsRaw = formData.get("maxExportChars");
+  const maxExportChars =
+    typeof maxExportCharsRaw === "string" && maxExportCharsRaw.length > 0
+      ? Number(maxExportCharsRaw)
+      : null;
+  const includeGlobal =
+    formData.get("includeGlobal") === "yes" ||
+    formData.get("includeGlobal") === "true";
+
   const input = projectUpdateSchema.parse({
     id: requireString(formData, "id"),
     name: optionalString(formData, "name"),
@@ -189,6 +237,12 @@ export async function updateProjectAction(
     icon: optionalString(formData, "icon"),
     defaultImportance: optionalNumber(formData, "defaultImportance"),
     isArchived: formData.get("isArchived") === "yes",
+    exportTemplate,
+    maxExportChars:
+      typeof maxExportChars === "number" && Number.isFinite(maxExportChars)
+        ? maxExportChars
+        : null,
+    includeGlobal,
   });
 
   try {
@@ -200,6 +254,12 @@ export async function updateProjectAction(
       icon: input.icon ?? null,
       defaultImportance: input.defaultImportance,
       isArchived: input.isArchived,
+      exportTemplate: input.exportTemplate ?? null,
+      maxExportChars:
+        typeof input.maxExportChars === "number" && Number.isFinite(input.maxExportChars)
+          ? input.maxExportChars
+          : null,
+      includeGlobal: input.includeGlobal,
     });
   } catch (err) {
     if (err instanceof ProjectSlugTakenError) {

@@ -32,6 +32,23 @@ Open [http://localhost:3000](http://localhost:3000) — you'll be redirected to 
 - `npm run db:migrate` — apply additive migrations from `prisma/migrations/`
 - `npm run db:sql` — print the full `CREATE TABLE` SQL for manual review
 
+## Environment variables
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | yes | `file:./dev.db` for local; `libsql://<…>.turso.io` for production |
+| `TURSO_AUTH_TOKEN` | yes in prod | Turso auth token |
+| `MNEMO_API_KEY` | yes in prod | Bearer + cookie auth; admin key. Set this BEFORE other Tier 3 routes can do anything useful |
+| `OPENAI_API_KEY` | optional | Enables `text-embedding-3-small` embeddings for `/api/search`, `/api/context`, and duplicate detection. Without it, search falls back to tokenized keyword scoring |
+| `MNEMO_BASE_URL` | optional | Override base URL for the Python client scripts (default `https://mnemo.joshstrohm.me`) |
+| `WEBHOOK_URL` | optional (Tier 3) | POST URL fired on every mutation. Body is `{event, timestamp, data}` |
+| `WEBHOOK_SECRET` | optional (Tier 3) | When set, the body is HMAC-SHA256-signed and sent as `X-Mnemo-Signature: sha256=<hex>`. 3× retry with backoff |
+| `RATE_LIMIT_RPM` | optional (Tier 3) | Per-IP sliding-window requests/minute (default 100) |
+| `COHERE_API_KEY` | optional (Tier 3) | Enables Cohere rerank on top of `/api/context` hits |
+| `RERANK_ENABLED` | optional (Tier 3) | Force local-rerank path even without Cohere |
+
+In Netlify, set these in **Site settings > Environment variables** (see Turso setup below).
+
 ## Turso Database Setup
 
 Mnemo uses Prisma with the `@prisma/adapter-libsql` driver adapter, which works with both local SQLite files and Turso (a hosted libSQL service). Here's how to set up Turso for production:
@@ -197,6 +214,85 @@ cat memories.json | python scripts/bulk_import.py - --allow-duplicate
 python scripts/bulk_import.py memories.json --dry-run                  # validate only
 ```
 
+### Tier 3 — context, import, admin, audit, api-keys, webhooks
+
+Mnemo now ships query-scoped, budget-aware context assembly, an
+`<!-- BEGIN:mnemo -->` block importer, an admin dashboard, an audit log,
+per-agent API keys, and HMAC-signed webhook delivery on mutations.
+
+#### Tier 3 — Context assembly
+
+- `GET /api/context?project=<slug|id|all|global>&q=<query>&budget=<n>&always_include=<memoryId,memoryId>&include_expired=<true|false>&format=<markdown|hermes-txt|json>&include_global=<true|false>` — Tier 3 budget-aware assembly.
+  - When `q` is provided: hybrid search (FTS5 + OpenAI embeddings), optional Cohere/local rerank (`COHERE_API_KEY` or `RERANK_ENABLED=true`).
+  - `budget` is a char budget (default 3500). Pinned memories (`isPinned=true`) **always** survive the budget; non-pinned memories fill the rest by `importance*score`.
+  - `always_include=<ids>` — comma-separated memory ids guaranteed to be in the output (e.g. house keys, agent sign-off).
+  - Response headers: `X-Mnemo-Tokens`, `X-Mnemo-Count`, `X-Mnemo-Omitted`, `X-Mnemo-Budget`, `X-Mnemo-Rerank` (true|false).
+  - This is the endpoint intended to replace `/api/export` for agent session-start uses where the budget is finite and the query is known.
+
+#### Tier 3 — Import BEGIN/END mnemo blocks
+
+- `POST /api/import` — body `{ content: "<!-- BEGIN:mnemo -->...<!-- END:mnemo -->", projectSlug?, allowDuplicate?, source?, createMissingProjects? }`. Parses every BEGIN/END block in `content` into memory entries and bulk-creates. Returns `{ created, duplicates, errors, parsedEntries, results: [...] }` with per-entry `status` of `created | duplicate | error`.
+- `POST /api/import/hermes` — body `{ entries: [{ text, type?, title?, tags?, projectSlug? }], allowDuplicate?, projectSlug? }`. Reconciles Hermes built-in `MEMORY.md` lines with Mnemo (each entry → one FACT memory, deduped). Returns the same `{ created, duplicates, errors, results }` shape.
+
+#### Tier 3 — Admin
+
+- `GET /api/admin/stats` — JSON snapshot of totals, embedding coverage %, FTS row count, top tags, last 10 versions, audit-log count, API-key count, per-project active/deleted/lastUpdate. The web UI `/admin` page renders this.
+- `GET /api/admin/audit?action=<str>&memoryId=<id>&projectId=<id>&limit=<n>&offset=<n>` — paginated audit log; the web UI has `/admin/audit`.
+- `GET /api/admin/expiring?days=<n>&project=<slug|global|all>` — list of non-deleted memories whose `expiresAt` is within `days`.
+- `GET /api/admin/backup` — streams a full JSON dump `{ schema: "mnemo.backup.v1", projects, memories, versions, counts }` as a downloadable `application/json` attachment.
+
+#### Tier 3 — Per-agent API keys
+
+- `GET /api/api-keys` — list active/known keys (no plaintext shown).
+- `POST /api/api-keys` — body `{ name, scopes: string[], expiresAt? }`. Returns the plaintext token **exactly once** (`{ id, name, scopes, token, ... }`). Store it now — it cannot be retrieved later.
+- `DELETE /api/api-keys/[id]?hard=true` — revoke (default) or hard-delete.
+- Auth scopes: `admin:read`, `admin:write`, `memory:read`, `memory:write`, `memory:delete`, `project:read`, `project:write`, `project:delete`, `search:read`, `context:read`, `export:read`, `import:write`, `backup:read`, `audit:read`. `admin:write` implies all.
+- Per-agent tokens are SHA-256-hashed in storage; verification uses constant-time hash lookup.
+
+#### Tier 3 — Audit & webhooks
+
+- Every mutating API route emits an `AuditLog` row (action, memoryId, projectId, actorIp, userAgent, apiKeyId, metadata) and fires a HMAC-signed webhook when `WEBHOOK_URL` is set:
+  - Header `X-Mnemo-Signature: sha256=<hex>` over the JSON body using `WEBHOOK_SECRET`.
+  - Retries 3× with linear backoff (700ms / 1400ms / 2100ms), 8s timeout per attempt.
+  - Events: `memory.created`, `memory.updated`, `memory.deleted`, `memory.soft_deleted`, `memory.restored`, `memory.batch_created`, `memory.batch_deleted`, `memory.imported`.
+- Audit/webhook failures never break the request — they log and move on.
+
+#### Tier 3 — Rate limiting
+
+- Every request (UI and API) is checked against a per-IP sliding window: default **100 req/min** (`RATE_LIMIT_RPM` env to override). 429 with `Retry-After` on overflow.
+- The window is **in-memory per Netlify instance** — sufficient for spam mitigation, not for global limiting. For multi-region strong limiting, front Mnemo with Cloudflare or use Upstash Redis.
+
+#### Tier 3 — Per-project export defaults
+
+`Project` now stores `exportTemplate` (`markdown|hermes-txt|json`), `maxExportChars`, and `includeGlobal` (default true). The web UI lets you edit these per project; they are only defaults — callers can still override via query string.
+
+#### OpenAPI
+
+- `GET /api/openapi.json` — minimal OpenAPI 3.1 document of every route. Unauthenticated for codegen tools. Cached 10 min.
+
+### Tier 3 — Python client scripts
+
+```bash
+# Tier 3 ops
+python scripts/backup.py -o ~/mnemo-backup.json                # GET /api/admin/backup
+python scripts/import_block.py ~/AGENTS.md --project-slug hermes  # POST /api/import
+echo "<!-- BEGIN:mnemo --><!-- END:mnemo -->" | python scripts/import_block.py -
+python scripts/reconcile.py --project hermes --root ~/code     # scan AGENTS.md/CLAUDE.md, report drift vs /api/export
+python scripts/mnemo_compact_report.py --threshold 0.88 -o ./dupes.md
+python scripts/mnemo_compact_report.py --discord-webhook https://discord.com/api/webhooks/<id>
+```
+
+### Tier 3 — Agent recipes
+
+```bash
+# Hermes session-start: budget-aware context for the active project
+python scripts/session_export.py --project hermes --max-chars 1500 --priority query --q "deploy"
+
+# Or use the dedicated /api/context endpoint via curl:
+curl -sH "Authorization: Bearer ***" \
+  "https://mnemo.joshstrohm.me/api/context?project=hermes&q=deploy&budget=1500&always_include=house_keys_id"
+```
+
 ## Database migrations
 
 Schema changes are additive and safe for existing data. The canonical schema lives in `schema.sql` (idempotent `CREATE TABLE IF NOT EXISTS` + indexes).
@@ -222,3 +318,19 @@ npm run db:apply          # applies the full schema.sql (safe for fresh database
 ```bash
 npm run db:migrate        # applies any unapplied migrations (idempotent)
 ```
+
+### Tier 3 migration
+
+`db/migrations/0003_tier3.sql` is additive and safe on top of a Tier-2 database. It adds:
+
+- to `Memory`: `isPinned` (default false, indexed), `embeddingModel`, `sourceMessageId`.
+- to `Project`: `exportTemplate`, `maxExportChars`, `includeGlobal` (default true).
+- the `ApiKey` table — `id`, `keyHash` (SHA-256, unique), `name`, `scopes` (JSON array), `expiresAt`, `lastUsedAt`, `isActive`, timestamps. Indexes on `isActive` and `expiresAt`. Helpers in `src/lib/apiKeys.ts`.
+- the `AuditLog` table — `id`, `action` (string: create/update/delete/soft_delete/restore/search/export/batch_create/batch_delete/import/backup/context/api_key_create/api_key_revoke), `memoryId`, `projectId`, `actorIp`, `userAgent`, `apiKeyId`, `metadata` (JSON), `createdAt`. Indexed by createdAt, action, memoryId, projectId. Helpers in `src/lib/audit.ts`.
+- New Memory indexes: `Memory_isPinned_idx`, `Memory_sourceSessionId_idx`.
+
+```bash
+npm run db:migrate        # applies any unapplied migrations (idempotent)
+```
+
+After the migration, rotate existing memories via `python scripts/backfill_embeddings.py --dry-run` to ensure `embeddingModel` is populated for any embeddings created before Tier 3 (optional — embeddings already work without it).

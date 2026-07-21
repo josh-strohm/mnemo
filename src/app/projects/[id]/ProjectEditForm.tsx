@@ -24,6 +24,9 @@ export function ProjectEditForm({ project }: { project: Project }) {
           icon: project.icon,
           defaultImportance: project.defaultImportance,
           isArchived: project.isArchived,
+          exportTemplate: project.exportTemplate,
+          maxExportChars: project.maxExportChars,
+          includeGlobal: project.includeGlobal,
         }}
       />
 

@@ -12,6 +12,10 @@ export function ProjectFields({
     icon?: string | null;
     defaultImportance?: number;
     isArchived?: boolean;
+    /** Tier 3 additions (optional — older callers omit) */
+    exportTemplate?: string | null;
+    maxExportChars?: number | null;
+    includeGlobal?: boolean;
   };
 }) {
   return (
@@ -91,6 +95,62 @@ export function ProjectFields({
           className={INPUT_CLASS}
         />
       </label>
+
+      <fieldset className="border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg p-3">
+        <legend className="text-xs uppercase tracking-wide text-zinc-500 px-2">
+          Tier 3 export defaults (optional)
+        </legend>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium">Default export format</span>
+            <select
+              name="exportTemplate"
+              defaultValue={defaultValues?.exportTemplate ?? ""}
+              className={INPUT_CLASS}
+            >
+              <option value="">(follow URL ?format=)</option>
+              <option value="markdown">markdown (AGENTS.md block)</option>
+              <option value="hermes-txt">hermes-txt (one line/memory)</option>
+              <option value="json">json (structured)</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium">
+              Max export chars (empty = unlimited)
+            </span>
+            <input
+              type="number"
+              name="maxExportChars"
+              min={0}
+              max={1_000_000}
+              step={100}
+              defaultValue={defaultValues?.maxExportChars ?? ""}
+              className={INPUT_CLASS}
+            />
+          </label>
+        </div>
+        <label className="mt-2 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="includeGlobal"
+            value="yes"
+            defaultChecked={
+              defaultValues?.includeGlobal === undefined
+                ? true
+                : Boolean(defaultValues.includeGlobal)
+            }
+            className="rounded"
+          />
+          <span className="font-medium">
+            Include global-scope memories in this project&apos;s export
+          </span>
+        </label>
+        <p className="mt-2 text-xs text-zinc-500">
+          These set the default when calling <code>/export?project={`{slug}`}</code> for
+          this project. Callers can still override via query string.
+        </p>
+      </fieldset>
+
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
