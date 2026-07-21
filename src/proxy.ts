@@ -9,11 +9,12 @@ import { checkRateLimit, gcRateLimitStore } from "@/lib/rateLimit";
  * Responsibilities:
  *   - Per-IP sliding-window rate limit (default 100 req/min, RATE_LIMIT_RPM env).
  *   - Authenticate the admin MNEMO_API_KEY as Bearer for /api/*.
- *     Per-agent API keys (ApiKey table) are verified in individual route
- *     handlers via `withApiKeyAuth()` from @/lib/apiKeys which uses the Node
- *     runtime and the libsql adapter.
  *   - Cookie-gate the UI (/admin requires the admin key; other pages
  *     require the same key as a cookie).
+ *
+ * Per-agent API keys (ApiKey table) are NOT verified in the proxy.
+ * They pass through with an 'x-mnemo-auth-pending' header, and route
+ * handlers verify them via withApiKeyAuth() from @/lib/apiKeys (Node runtime).
  */
 
 const COOKIE_NAME = "mnemo-auth";
