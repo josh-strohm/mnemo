@@ -176,3 +176,108 @@ export function apiKeyHasScope(
 }
 
 export { parseDbTags as _internalParseTags_UNUSED };
+
+/**
+ * Per-route Node-runtime helper. When the Edge proxy admitted a non-admin
+ * Bearer (or when proxy is bypassed in dev), a route handler can call this
+ * to:
+ *   - verify the per-agent key against the ApiKey table
+ *   - check scope
+ *   - attach the verified key id/name to the request via ctx
+ *
+ * Returns null on success → route proceeds with req.headers already
+ * augmented. Returns a Response on failure → route should `return result`.
+ */
+export type WithApiKeyResult =
+  | { ok: true; apiKey: ApiKeyWithMeta | null; headers: Record<string, string> }
+  | { ok: false; response: Response };
+
+export type RouteAuthCtx = { headers: Record<string, string> };
+
+const SCOPE_SUGGESTS: Record<string, string> = {
+  "memory:read": "memory:read",
+  "memory:write": "memory:write",
+  "memory:delete": "memory:delete",
+  "project:read": "project:read",
+  "project:write": "project:write",
+  "project:delete": "project:delete",
+  "search:read": "search:read",
+  "context:read": "context:read",
+  "export:read": "export:read",
+  "import:write": "import:write",
+  "backup:read": "backup:read",
+  "audit:read": "audit:read",
+  "admin:read": "admin:read",
+  "admin:write": "admin:write",
+};
+
+export async function withApiKeyAuth(
+  request: Request,
+  requiredScope: string | null,
+): Promise<WithApiKeyResult> {
+  const adminKey = process.env.MNEMO_API_KEY || "";
+  const header = request.headers.get("authorization") ?? "";
+  const bearer = header.startsWith("Bearer ") ? header.slice(7) : "";
+
+  // Admin key check first — full access, no DB.
+  if (adminKey && bearer === adminKey) {
+    return {
+      ok: true,
+      apiKey: null,
+      headers: { "x-mnemo-api-key-id": "primary", "x-mnemo-api-key-name": "admin" },
+    };
+  }
+
+  // No bearer at all → unauthenticated request for routes that require auth.
+  if (!bearer) {
+    return {
+      ok: false,
+      response: Response.json({ error: "Unauthorized" }, { status: 401 }),
+    };
+  }
+
+  // Per-agent token lookup.
+  let apiKey: ApiKeyWithMeta;
+  try {
+    const verified = await verifyApiKeyToken(bearer);
+    if (!verified) {
+      return {
+        ok: false,
+        response: Response.json({ error: "Unauthorized" }, { status: 401 }),
+      };
+    }
+    apiKey = verified;
+  } catch {
+    return {
+      ok: false,
+      response: Response.json({ error: "Unauthorized" }, { status: 401 }),
+    };
+  }
+
+  if (requiredScope && !apiKeyHasScope(apiKey, requiredScope)) {
+    return {
+      ok: false,
+      response: Response.json(
+        {
+          error: "Forbidden: missing scope",
+          required: requiredScope,
+        },
+        { status: 403 },
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    apiKey,
+    headers: {
+      "x-mnemo-api-key-id": apiKey.id,
+      "x-mnemo-api-key-name": apiKey.name,
+    },
+  };
+}
+
+export { SCOPE_SUGGESTS };
+
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars */
+const _UNUSED_PARSE_TAGS = parseDbTags;
