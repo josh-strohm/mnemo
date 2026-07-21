@@ -178,8 +178,8 @@ export async function listMemories(
   const where = baseWhere(filters);
   const now = new Date();
 
-  // App-side filtering (tag and/or query relevance) requires the full row
-  // set to score correctly, so we paginate in memory for those cases.
+  // App-side filtering (tag and/or query exact matching) requires the full row
+  // set to filter correctly, so we paginate in memory for those cases.
   const needsAppFiltering = Boolean(filters.q) || Boolean(filters.tag);
 
   if (needsAppFiltering) {
@@ -195,32 +195,18 @@ export async function listMemories(
     }
 
     if (filters.q) {
-      const tokens = tokenizeQuery(filters.q);
-      const scored = mapped
-        .map((x) => {
-          const s = scoreMemoryAgainstQuery({
-            title: x.mem.title,
-            content: x.mem.content,
-            tags: x.mem.tags,
-            tokens,
-            updatedAt: x.mem.updatedAt,
-            now,
-          });
-          return { x, s };
-        })
-        .filter((y) => y.s.score > 0)
-        .sort((a, b) => b.s.score - a.s.score);
-      const total = scored.length;
-      const items = scored
-        .slice(filters.offset, filters.offset + filters.limit)
-        .map((y) => y.x.mem);
-      return { items, total };
+      const query = filters.q.toLowerCase();
+      // Exact matching: only include memories that contain the query term
+      mapped = mapped.filter(
+        (x) =>
+          x.mem.title.toLowerCase().includes(query) ||
+          x.mem.content.toLowerCase().includes(query) ||
+          x.mem.tags.some((t) => t.toLowerCase().includes(query))
+      );
     }
 
-    // tag-only: sort by createdAt desc, paginate in memory
-    const sorted = mapped.sort(
-      (a, b) => b.mem.createdAt.getTime() - a.mem.createdAt.getTime(),
-    );
+    // Sort and paginate in memory
+    const sorted = mapped.sort((a, b) => b.mem.createdAt.getTime() - a.mem.createdAt.getTime());
     const total = sorted.length;
     const items = sorted
       .slice(filters.offset, filters.offset + filters.limit)
